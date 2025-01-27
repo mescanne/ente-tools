@@ -21,6 +21,7 @@ jobs:
     - uses: pre-commit/action@v3.0.1
     - uses: pavelzw/pytest-action@v2
       with:
+        custom-pytest: uv run pytest
         emoji: false
         verbose: false
         job-summary: true
