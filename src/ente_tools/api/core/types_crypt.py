@@ -14,7 +14,7 @@
 """DocString."""
 
 import logging
-from base64 import b64decode, b64encode
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 
 from nacl.bindings import (
     crypto_box_seal_open,
@@ -88,24 +88,24 @@ class EnteKeys(BaseModel):
         key_enc_key = kdf(
             SecretBox.KEY_SIZE,
             bytes(password, "utf8"),
-            b64decode(bytes(auth.key_attributes.kek_salt, "utf8")),
+            urlsafe_b64decode(bytes(auth.key_attributes.kek_salt, "utf8")),
             opslimit=auth.key_attributes.ops_limit,
             memlimit=auth.key_attributes.mem_limit,
         )
 
         master_key = SecretBox(key_enc_key).decrypt(
-            b64decode(auth.key_attributes.encrypted_key),
-            b64decode(auth.key_attributes.key_decryption_nonce),
+            urlsafe_b64decode(auth.key_attributes.encrypted_key),
+            urlsafe_b64decode(auth.key_attributes.key_decryption_nonce),
         )
 
         secret_key = SecretBox(master_key).decrypt(
-            b64decode(auth.key_attributes.encrypted_secret_key),
-            b64decode(auth.key_attributes.secret_key_decryption_nonce),
+            urlsafe_b64decode(auth.key_attributes.encrypted_secret_key),
+            urlsafe_b64decode(auth.key_attributes.secret_key_decryption_nonce),
         )
 
         token = crypto_box_seal_open(
-            b64decode(auth.encrypted_token),
-            b64decode(auth.key_attributes.public_key),
+            urlsafe_b64decode(auth.encrypted_token),
+            urlsafe_b64decode(auth.key_attributes.public_key),
             secret_key,
         )
 
@@ -114,7 +114,7 @@ class EnteKeys(BaseModel):
             master_key=master_key,
             secret_key=secret_key,
             token=token,
-            public_key=b64decode(auth.key_attributes.public_key),
+            public_key=urlsafe_b64decode(auth.key_attributes.public_key),
         )
 
 
@@ -129,13 +129,13 @@ class SecretPair(BaseModel):
         """DocString."""
         nonce = random(SecretBox.NONCE_SIZE)
         return SecretPair(
-            encrypted=str(b64encode(SecretBox(key).encrypt(msg, nonce).ciphertext), "utf-8"),
-            nonce=str(b64encode(nonce), "utf-8"),
+            encrypted=str(urlsafe_b64encode(SecretBox(key).encrypt(msg, nonce).ciphertext), "utf-8"),
+            nonce=str(urlsafe_b64encode(nonce), "utf-8"),
         )
 
     def decrypt(self, key: bytes) -> bytes:
         """DocString."""
-        return SecretBox(key).decrypt(b64decode(self.encrypted), nonce=b64decode(self.nonce))
+        return SecretBox(key).decrypt(urlsafe_b64decode(self.encrypted), nonce=urlsafe_b64decode(self.nonce))
 
 
 class EnteEncKeys(BaseModel):
@@ -155,7 +155,7 @@ class EnteEncKeys(BaseModel):
             master_key=SecretPair.encrypt(device_key, keys.master_key),
             secret_key=SecretPair.encrypt(device_key, keys.secret_key),
             token=SecretPair.encrypt(device_key, keys.token),
-            public_key=str(b64encode(keys.public_key), "utf-8"),
+            public_key=str(urlsafe_b64encode(keys.public_key), "utf-8"),
         )
 
     def to_keys(self, device_key: bytes) -> EnteKeys:
@@ -165,5 +165,5 @@ class EnteEncKeys(BaseModel):
             master_key=self.master_key.decrypt(device_key),
             secret_key=self.secret_key.decrypt(device_key),
             token=self.token.decrypt(device_key),
-            public_key=b64decode(self.public_key),
+            public_key=urlsafe_b64decode(self.public_key),
         )

@@ -13,7 +13,7 @@
 # limitations under the License.
 """Docstring."""
 
-from base64 import b64decode, b64encode
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from functools import cache
 
 import keyring
@@ -31,9 +31,9 @@ def get_device_key() -> bytes:
     encoded = keyring.get_password(SERVICE, USER)
     if not encoded:
         device_key = random(SecretBox.KEY_SIZE)
-        encoded = str(b64encode(device_key), "utf8")
+        encoded = str(urlsafe_b64encode(device_key), "utf8")
         keyring.set_password(SERVICE, USER, encoded)
-    return b64decode(bytes(encoded, "utf8"))
+    return urlsafe_b64decode(bytes(encoded, "utf8"))
 
 
 class DeviceSecret(BaseModel):
@@ -47,13 +47,13 @@ class DeviceSecret(BaseModel):
         """DocString."""
         nonce = random(SecretBox.NONCE_SIZE)
         return DeviceSecret(
-            encrypted=str(b64encode(SecretBox(get_device_key()).encrypt(msg, nonce).ciphertext), "utf-8"),
-            nonce=str(b64encode(nonce), "utf-8"),
+            encrypted=str(urlsafe_b64encode(SecretBox(get_device_key()).encrypt(msg, nonce).ciphertext), "utf-8"),
+            nonce=str(urlsafe_b64encode(nonce), "utf-8"),
         )
 
     def decrypt(self) -> bytes:
         """DocString."""
         return SecretBox(get_device_key()).decrypt(
-            b64decode(self.encrypted),
-            nonce=b64decode(self.nonce),
+            urlsafe_b64decode(self.encrypted),
+            nonce=urlsafe_b64decode(self.nonce),
         )

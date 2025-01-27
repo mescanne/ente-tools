@@ -13,9 +13,9 @@
 # limitations under the License.
 """DocString."""
 
+import getpass
 import logging
 from collections.abc import Callable
-from getpass import getpass
 
 from pydantic import BaseModel
 
@@ -72,9 +72,10 @@ class EnteAccount(BaseModel):
         log.debug("auth_response: %s", auth_response)
 
         keys = retry(
-            lambda: EnteKeys.from_auth(auth_response, getpass()),
+            lambda: EnteKeys.from_auth(auth_response, getpass.getpass()),
             lambda: log.warning("Password failed. Try again."),
         )
+
         return EnteAccount(
             email=email,
             attributes=attributes,

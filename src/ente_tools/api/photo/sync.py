@@ -37,7 +37,7 @@ class EnteData(BaseModel):
     """DocString."""
 
     accounts: list[EnteAccount] = []
-    local: LocalFileSet
+    local: LocalFileSet = LocalFileSet()
 
 
 class EnteClient:
