@@ -65,6 +65,7 @@ venv = ".venv"
 
 [dependency-groups]
 dev = [
+    "pytest-md>=0.2.0",
     "pytest>=8.3.4",
     "testcontainers>=4.9.1",
 ]
