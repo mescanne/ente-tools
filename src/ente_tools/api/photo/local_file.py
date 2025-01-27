@@ -15,7 +15,7 @@
 
 import hashlib
 import logging
-from base64 import b64encode
+from base64 import urlsafe_b64encode
 from mimetypes import guess_type
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
@@ -80,7 +80,7 @@ class LocalFileSet(BaseModel):
         def hash_file(h: LocalFile) -> LocalFile:
             with Path(h.fullpath).open("rb") as f:
                 h.hash = str(
-                    b64encode(hashlib.file_digest(f, "blake2b").digest()),
+                    urlsafe_b64encode(hashlib.file_digest(f, "blake2b").digest()),
                     "utf8",
                 )
                 return h

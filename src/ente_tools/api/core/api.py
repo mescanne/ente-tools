@@ -15,13 +15,12 @@
 """DocString."""
 
 import logging
-from base64 import b64decode, b64encode
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from collections.abc import Callable
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
-# Third party
 import httpx
 
 from ente_tools.api.core.ente_crypt import CHUNK_SIZE, decrypt_stream_to_file
@@ -52,8 +51,8 @@ class EnteAPI:
         self.api_url = api_url
         self.api_account_url = api_account_url
         self.api_download_url = api_download_url
-        if token:
-            self.set_token(token)
+        self.token = token
+        self._update_headers()
 
     def set_token(self, token: bytes | None = None) -> None:
         """DocString."""
@@ -63,18 +62,23 @@ class EnteAPI:
     def _update_headers(self) -> None:
         self.headers = {"X-Client-Package": self.pkg}
         if self.token:
-            self.headers["X-Auth-Token"] = str(b64encode(self.token), "utf-8")
+            self.headers["X-Auth-Token"] = str(urlsafe_b64encode(self.token), "utf-8")
         log.debug("Headers are now %s", str(self.headers))
 
-    def _get(self, path: str, data: dict[str, str] | None = None) -> Any:  # noqa: ANN401
+    def _get(self, path: str, data: dict[str, str] | None = None, headers: dict[str, str] | None = None) -> Any:  # noqa: ANN401
         url = f"{self.api_url}{path}"
-        if log.isEnabledFor(logging.DEBUG):
-            log.debug("Requesting %s", url)
         if not data:
             data = {}
-        r = httpx.get(url, params=data, headers=self.headers)
+        if not headers:
+            headers = self.headers
+        else:
+            headers.update(self.headers)
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Requesting %s (headers %s)", url, headers)
+        r = httpx.get(url, params=data, headers=headers)
         # TODO(scannell): 404 is what?
         if r.status_code != HTTPStatus.OK:
+            log.info("Invalid status from %s of %d: %s", url, r.status_code, str(r.content, "utf"))
             msg = f"invalid status from URL {url}: {r.status_code}"
             raise EnteAPIError(msg)
         if log.isEnabledFor(logging.DEBUG):
@@ -104,6 +108,10 @@ class EnteAPI:
         return AuthorizationResponse.model_validate(
             self._post("/users/verify-email", data={"email": email, "ott": otp}),
         )
+
+    def get_user_details(self) -> None:
+        """DocString."""
+        log.info("User details: %s", str(self._get("/users/details/v2", {})))
 
     def attributes(self, email: str) -> SPRAttributes:
         """DocString."""
@@ -155,6 +163,6 @@ class EnteAPI:
         with decrypt_stream_to_file(
             dest,
             key=file.enc_file_key.decrypt(),
-            header=b64decode(file.file.decryption_header),
+            header=urlsafe_b64decode(file.file.decryption_header),
         ) as handler:
             self._download_file(file.id, handler, chunk_size=CHUNK_SIZE)

@@ -19,3 +19,8 @@ jobs:
     - name: Install the project
       run: uv sync --all-extras --dev
     - uses: pre-commit/action@v3.0.1
+    - uses: pavelzw/pytest-action@v2
+      with:
+        emoji: false
+        verbose: false
+        job-summary: true

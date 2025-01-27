@@ -1,0 +1,114 @@
+services:
+  museum:
+    image: ghcr.io/ente-io/server
+    ports:
+      - 8080
+    #ports:
+    #  - 8080:8080 # API
+    #  - 2112:2112 # Prometheus metrics
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-provision:
+        condition: service_completed_successfully
+      minio-provision:
+        condition: service_completed_successfully
+    environment:
+      # Pass-in the config to connect to the DB and MinIO
+      ENTE_CREDENTIALS_FILE: /credentials.yaml
+    volumes:
+      - custom-logs:/var/logs
+      - ./files/museum.yaml:/museum.yaml:ro
+      - ./files/credentials.yaml:/credentials.yaml:ro
+      - museum-data:/data
+    networks:
+      - internal
+
+  # Resolve "localhost:3200" in the museum container to the minio container.
+  socat:
+    image: alpine/socat
+    network_mode: service:museum
+    depends_on:
+      - museum
+    command: "TCP-LISTEN:3200,fork,reuseaddr TCP:minio:3200"
+
+  postgres:
+    image: postgres:15
+    ports:
+      - 5432
+    environment:
+      POSTGRES_USER: pguser
+      POSTGRES_PASSWORD: pgpass
+      POSTGRES_DB: ente_db
+    # Wait for postgres to accept connections before starting museum.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-q",
+          "-d",
+          "ente_db",
+          "-U",
+          "pguser"
+        ]
+      start_period: 40s
+      start_interval: 1s
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - internal
+
+  postgres-provision:
+    image: postgres:15
+    container_name: dbpostgresql_init
+    command: psql -h postgres -d ente_db -U pguser -f /sql/${INITSQL}
+    volumes:
+      - ./sql:/sql:ro
+    environment:
+      - PGPASSWORD=pgpass
+      - INITSQL=init.sql
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
+  minio:
+    image: minio/minio
+    # Use different ports than the minio defaults to avoid conflicting
+    # with the ports used by Prometheus.
+    ports:
+      - 3200
+    #ports:
+    #  - 3200:3200 # API
+    #  - 3201:3201 # Console
+    environment:
+      MINIO_ROOT_USER: test
+      MINIO_ROOT_PASSWORD: testtest
+    command: server /data --address ":3200" --console-address ":3201"
+    volumes:
+      - minio-data:/data
+    networks:
+      - internal
+
+  minio-provision:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_started
+    volumes:
+      - ./files/minio-provision.sh:/provision.sh:ro
+      - minio-data:/data
+    networks:
+      - internal
+    entrypoint: /bin/bash /provision.sh
+
+volumes:
+  custom-logs:
+  postgres-data:
+  minio-data:
+  museum-data:
+
+networks:
+  internal:
