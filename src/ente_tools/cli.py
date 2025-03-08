@@ -28,7 +28,7 @@ from ente_tools.filestat import load
 
 APP_NAME = "ente_tool2"
 
-app = typer.Typer()
+app = typer.Typer(rich_markup_mode=None)
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ logging.basicConfig(
 
 
 def get_toml_config(app_name: str) -> str:
-    """DocString."""
+    """Fetch TOML configuration file to load."""
     filename = f"{app_name}.toml"
 
     potential_paths = [
@@ -59,7 +59,7 @@ def get_toml_config(app_name: str) -> str:
 
 
 def load_toml_config(ctxt: typer.Context, param: typer.CallbackParam, config: str) -> str:
-    """DocString."""
+    """Load TOML configuration file."""
     if not config:
         return config
     log.info("Loading config file %s", config)
@@ -67,7 +67,7 @@ def load_toml_config(ctxt: typer.Context, param: typer.CallbackParam, config: st
 
 
 def get_client(ctxt: typer.Context, data: EnteData) -> EnteClient:
-    """DocString."""
+    """Create EnteClient using the command line arguments."""
     return EnteClient(
         data,
         api_url=ctxt.obj["api_url"],
@@ -82,16 +82,16 @@ def link(
     email: str,
     unlink: Annotated[bool, typer.Option()] = False,  # noqa: FBT002
 ) -> None:
-    """DocString."""
-    with load(ctxt.obj["database"], EnteData) as data:
+    """Link or unlink email with local database."""
+    with load(ctxt.obj["database"], EnteData, max_vers=ctxt.obj["max_vers"]) as data:
         client = get_client(ctxt, data)
         client.link(email, unlink=unlink)
 
 
 @app.command()
 def info(ctxt: typer.Context) -> None:
-    """DocString."""
-    with load(ctxt.obj["database"], EnteData, skip_save=True) as data:
+    """Fetch general information about the database."""
+    with load(ctxt.obj["database"], EnteData, skip_save=True, max_vers=ctxt.obj["max_vers"]) as data:
         client = get_client(ctxt, data)
         client.info()
 
@@ -102,25 +102,35 @@ def refresh(
     force_refresh: Annotated[bool, typer.Option()] = False,  # noqa: FBT002
     email: Annotated[str | None, typer.Option()] = None,
 ) -> None:
-    """DocString."""
-    log.info("Refreshing")
-    with load(ctxt.obj["database"], EnteData) as data:
+    """Refresh both remote and local data."""
+    with load(ctxt.obj["database"], EnteData, max_vers=ctxt.obj["max_vers"]) as data:
         client = get_client(ctxt, data)
         client.remote_refresh(email=email, force_refresh=force_refresh)
+
+    with load(ctxt.obj["database"], EnteData, max_vers=ctxt.obj["max_vers"]) as data:
+        client = get_client(ctxt, data)
         client.local_refresh(ctxt.obj["sync_dir"], force_refresh=force_refresh)
 
 
 @app.command()
 def upload(ctxt: typer.Context, file: str) -> None:
-    """DocString."""
+    """Upload local file."""
     log.info("sync_dir: %s database: %s", ctxt.obj["sync_dir"], ctxt.obj["database"])
     log.info("Uploading file %s", file)
 
 
 @app.command()
+def download_missing(ctxt: typer.Context) -> None:
+    """Download any files that are not local."""
+    with load(ctxt.obj["database"], EnteData, max_vers=ctxt.obj["max_vers"]) as data:
+        client = get_client(ctxt, data)
+        client.download_missing()
+
+
+@app.command()
 def download(ctxt: typer.Context, file: str) -> None:
-    """DocString."""
-    with load(ctxt.obj["database"], EnteData) as data:
+    """Download a remote file."""
+    with load(ctxt.obj["database"], EnteData, max_vers=ctxt.obj["max_vers"]) as data:
         client = get_client(ctxt, data)
         client.download(file)
 
@@ -128,21 +138,23 @@ def download(ctxt: typer.Context, file: str) -> None:
 @app.callback()
 def app_main(  # noqa: PLR0913
     ctxt: typer.Context,
-    sync_dir: Annotated[Path, typer.Option()] = Path.home(),  # noqa: B008
-    api_url: Annotated[str, typer.Option()] = EnteClient.EnteApiUrl,
-    api_account_url: Annotated[str, typer.Option()] = EnteClient.EnteAccountUrl,
-    api_download_url: Annotated[str, typer.Option()] = EnteClient.EnteDownloadUrl,
-    database: Annotated[Path, typer.Option()] = Path(user_cache_dir()) / f"{APP_NAME}.json.gz",  # noqa: B008
-    debug: Annotated[bool, typer.Option()] = False,  # noqa: FBT002
+    sync_dir: Annotated[Path, typer.Option(help="Local synchronization directory")] = Path.home(),  # noqa: B008
+    max_vers: Annotated[int, typer.Option(help="Maximum backup versions of database (0 = disable)")] = 10,
+    api_url: Annotated[str, typer.Option(help="API URL for Ente")] = EnteClient.EnteApiUrl,
+    api_account_url: Annotated[str, typer.Option(help="API Account URL for Ente")] = EnteClient.EnteAccountUrl,
+    api_download_url: Annotated[str, typer.Option(help="Download API URL")] = EnteClient.EnteDownloadUrl,
+    database: Annotated[Path, typer.Option(help="Database file")] = Path(user_cache_dir()) / f"{APP_NAME}.json.gz",  # noqa: B008
+    debug: Annotated[bool, typer.Option(help="Enable debug logging")] = False,  # noqa: FBT002
     config: Annotated[  # noqa: ARG001
         str,
         typer.Option(
             callback=load_toml_config,
             is_eager=True,
+            help="TOML configuration file to load",
         ),
     ] = get_toml_config(APP_NAME),
 ) -> None:
-    """DocString."""
+    """Ente tool utility for synchronizing local files with Ente."""
     if debug:
         logging.getLogger().setLevel("DEBUG")
 
@@ -152,7 +164,7 @@ def app_main(  # noqa: PLR0913
         log.error("Sync directory %s does not exist.", sync_dir)
         raise typer.Exit(1)
 
-    log.info("Database: %s", database)
+    ctxt.obj["max_vers"] = max_vers
     ctxt.obj["sync_dir"] = sync_dir
     ctxt.obj["database"] = database
     ctxt.obj["api_url"] = api_url
@@ -161,7 +173,7 @@ def app_main(  # noqa: PLR0913
 
 
 def main() -> None:
-    """DocString."""
+    """Launch main application for Ente tool."""
     try:
         app()
     except EnteAPIError as e:

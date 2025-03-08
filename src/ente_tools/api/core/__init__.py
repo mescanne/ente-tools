@@ -11,7 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""DocString."""
+"""Core API module for interacting with Ente.
+
+This module provides the main API client and core data types for interacting with
+the Ente service. It includes the EnteAPI client class, error handling, and
+data models for collections and files.
+"""
 
 from .api import EnteAPI, EnteAPIError
 from .types_collection import Collection

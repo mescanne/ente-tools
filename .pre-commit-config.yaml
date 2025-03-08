@@ -27,6 +27,9 @@ repos:
   rev: 0.5.21
   hooks:
     - id: uv-sync
+      args:
+        - --all-extras
+        - --dev
 
 # Check license headers and white space vs tabs
 - repo: https://github.com/Lucas-C/pre-commit-hooks
@@ -44,16 +47,32 @@ repos:
         - docs/LICENSE_HEADER.txt # defaults to: LICENSE.txt
         - --no-extra-eol          # see below
 
-- repo: https://github.com/RobertCraigie/pyright-python
-  rev: v1.1.391
+# Local checks
+- repo: local
   hooks:
     - id: pyright
-
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.9.1
-  hooks:
-    # Run the linter.
+      name: pyright
+      entry: .venv/bin/pyright -p . -v .
+      pass_filenames: true
+      files: .py$
+      language: python
     - id: ruff
-      args: [ --fix ]
-    # Run the formatter.
+      name: ruff
+      entry: .venv/bin/ruff
+      args: [ check, --fix ]
+      pass_filenames: true
+      files: .py$
+      language: python
     - id: ruff-format
+      name: ruff-format
+      entry: .venv/bin/ruff
+      args: [ format ]
+      pass_filenames: true
+      files: .py$
+      language: python
+#    - id: pytest
+#      name: pytest
+#      entry: .venv/bin/pytest
+#      args: [ --cov=ente_tools ]
+#      pass_filenames: false
+#      language: python

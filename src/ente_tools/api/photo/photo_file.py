@@ -21,38 +21,38 @@ from ente_tools.api.core.types_file import File
 class RemotePhotoFile:
     """DocString."""
 
-    def __init__(self, ente_file: File) -> None:
+    def __init__(self, file: File) -> None:
         """DocString."""
-        self.ente_file = ente_file
+        self.file = file
 
-    def filename(self) -> str:
+    def get_filename(self) -> str:
         """DocString."""
-        return self.ente_file.metadata["title"]
+        return self.file.metadata["title"]
 
-    def source_id(self) -> str:
+    def get_source_id(self) -> str:
         """DocString."""
-        return str(self.ente_file.metadata["deviceFolder"])
+        return str(self.file.metadata["deviceFolder"])
 
-    def folder(self) -> str:
+    def get_folder(self) -> str:
         """DocString."""
-        return str(self.ente_file.id)
+        return str(self.file.id)
 
-    def create_time(self) -> datetime:
+    def get_create_time(self) -> datetime:
         """DocString."""
-        return datetime.fromtimestamp(self.ente_file.metadata["creationTime"] / 1e6, tz=UTC)
+        return datetime.fromtimestamp(self.file.metadata["creationTime"] / 1e6, tz=UTC)
 
-    def modify_time(self) -> datetime:
+    def get_modify_time(self) -> datetime:
         """DocString."""
-        return datetime.fromtimestamp(self.ente_file.metadata["modificationTime"] / 1e6, tz=UTC)
+        return datetime.fromtimestamp(self.file.metadata["modificationTime"] / 1e6, tz=UTC)
 
-    def update_time(self) -> datetime:
+    def get_update_time(self) -> datetime:
         """DocString."""
-        return datetime.fromtimestamp(self.ente_file.metadata["updateTime"] / 1e6, tz=UTC)
+        return datetime.fromtimestamp(self.file.metadata["updateTime"] / 1e6, tz=UTC)
 
-    def size(self) -> int:
+    def get_size(self) -> int:
         """DocString."""
-        return self.ente_file.info.file_size
+        return self.file.info.file_size if self.file.info else 0
 
-    def hash(self) -> int:
+    def get_hash(self) -> int:
         """DocString."""
-        return self.ente_file.metadata["hash"]
+        return self.file.metadata["hash"]

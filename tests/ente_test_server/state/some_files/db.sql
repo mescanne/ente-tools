@@ -1320,6 +1320,7 @@ COPY public.casting (id, code, public_key, collection_id, cast_user, encrypted_p
 --
 
 COPY public.collection_files (file_id, collection_id, encrypted_key, key_decryption_nonce, is_deleted, updation_time, c_owner_id, f_owner_id, created_at) FROM stdin;
+10000000	1580559962386438	+Cmc5jGF8IvvHpfGtxs4sxpPp8HNo/IhJRXIGyVoRdqucIX4AYVumbojT+iXU/m5	H9/i0TnlK3Am2qJ+RVEiPjMn2OgcxEZ3	f	1739698159035508	1580559962386438	1580559962386438	1739698159042643
 \.
 
 
@@ -1336,6 +1337,7 @@ COPY public.collection_shares (collection_id, from_user_id, to_user_id, encrypte
 --
 
 COPY public.collections (collection_id, owner_id, encrypted_key, key_decryption_nonce, name, type, attributes, updation_time, is_deleted, encrypted_name, name_decryption_nonce, magic_metadata, pub_magic_metadata, app) FROM stdin;
+1580559962386438	1580559962386438	2ZB4ZII7zzBwmCK4k6C+E85VeBvsMkG0rbzLrITABOHejCFXXmMW0uyRfFJxqoSj	XfzAX9WPyBMALiDunroy9He0LPo4CyRt		uncategorized	{"version": 0}	1739698159035508	f	DSJC+NphpyN+6jK26pSNqSJhy9rgFaEeSV/E7+4=	y7PibIISieS2L4Mw+tMYswZ/0ZR0NFHm	\N	\N	photos
 \.
 
 
@@ -1409,6 +1411,7 @@ COPY public.file_data (file_id, user_id, data_type, size, latest_bucket, replica
 --
 
 COPY public.files (file_id, owner_id, file_decryption_header, thumbnail_decryption_header, metadata_decryption_header, encrypted_metadata, updation_time, magic_metadata, pub_magic_metadata, info) FROM stdin;
+10000000	1580559962386438	HvUPP6WAoEIFsIx2fkiddhExe9W3K2eU	+uT6xZepfbEIv9l2IqN8+r3AvUcqiyl3	oMP/GGh3AtmdUtc17EpXBDEHCTzS/E/D	Pxj0Sw8eOnLstzQHuzVkoGdopu2DwXincwLP8M2pt0EvhwwcvghMJc0/iTdfcAyOCwyoqnTF8YyH43XJariOg54gfBZKjjL8eD3dVq4aN5zUAfJxHLv7X//AulVwwzxnK8ShP5463UKwJr60iFqEdm/+Bo1lFuKXEqGnJhfYDNItNlIi595nrFlUYKimqGW/qJCWya7tXCvsbZnJoPoa+JVPiWW5U5uPeNrkl6nlU62HcUJd/KEVuGZckRZBi1tw8j7BS7EM75xN5oDxJF3r7RIBGH4g1twT42dYS1MRFYM=	1739698159035508	\N	{"data": "0uzArElPEW7Vk/BRbpdI+UgEuDlv54mrVEeeUdTvsA8WWDbylo/3r2FPQOptVJy2jAgAo4bhiSJah3CMFniF62Fv3YT7WA==", "count": 3, "header": "Um5TIgQbTYIx5Ju3X1dLvqMhXn7hv2TE", "version": 1}	{"fileSize": 3582, "thumbSize": 33595}
 \.
 
 
@@ -1442,6 +1445,8 @@ COPY public.notification_history (user_id, template_id, sent_time) FROM stdin;
 --
 
 COPY public.object_copies (object_key, b2, want_b2, wasabi, want_wasabi, scw, want_scw, last_attempt) FROM stdin;
+1580559962386438/ce17ea8f-60cb-4549-a308-edbe2097f2db	1739698159042643	t	\N	t	\N	t	0
+1580559962386438/adca0074-0e1f-4e27-877c-1b460c9bbc0f	1739698159042643	t	\N	t	\N	f	0
 \.
 
 
@@ -1450,6 +1455,8 @@ COPY public.object_copies (object_key, b2, want_b2, wasabi, want_wasabi, scw, wa
 --
 
 COPY public.object_keys (file_id, o_type, object_key, size, datacenters, is_deleted, created_at, updated_at) FROM stdin;
+10000000	file	1580559962386438/ce17ea8f-60cb-4549-a308-edbe2097f2db	3582	{b2-eu-cen}	f	1739698159042643	1739698159042643
+10000000	thumbnail	1580559962386438/adca0074-0e1f-4e27-877c-1b460c9bbc0f	33595	{b2-eu-cen}	f	1739698159042643	1739698159042643
 \.
 
 
@@ -1573,6 +1580,7 @@ COPY public.srp_auth (user_id, srp_user_id, salt, verifier, created_at, updated_
 
 COPY public.srp_sessions (id, srp_user_id, server_key, srp_a, has_verified, attempt_count, created_at, updated_at) FROM stdin;
 9d2e3b32-d6e5-467a-a068-89bdc4c16257	5e0d052d-64af-4313-9381-917dbcbc59e9	clmDhyM3x9SLAysknSDiNCBPnptv0dr/QCnX/f2G67A=	6pQTzCDkmbRP3E94Kx+hq17su+9g+HZpzP47I262ULqclguZ3vBSE3MDK/w+9vPKLzbyJNdz/Z4tBK8tAzARBM+3ypJ21b8oxxItn+z/fOGUvB/UL1m2lPnpudIeZrHf+2ims5iPy1QaykEE8ufwt74zH7K8RQXJ6QGePp/UodVCyRzlgj1j2l8WD2uVCfMUhipt6UW1cur7E4tJ9caToekd2uYzJcqUcC6l1HTZUx4LhM825lFdLANQiVJo3w+te5NdWA5RyEpCy7Ra2f1w775snhVv1UOZZhMVxeUm1tPqwAv7AjD3MWRJ1F+8feeVsimzb/uTPqCNBwav4/rAyLjvkk0YiWw4Co+bk/ksNngfYCsAO57VQ33YVkcu5ASRcyeHpMpgmUx/TS+LmdEKvmtIvLToVCnK1dQomfS/g8qefplBd09oLEZogH60/rqfch3wBIPsSuAt/4mr8W3fOs9NgZoC+qz8W7kIOeH9lHW8mIbbTYHTsAqN7200EZVf0YE98eSkdZZLTdWcAe2DKmgDy2O+C62uzjJN9x52W4HUecx4Y3zWltGOZSnkffGO5vUdmA9PVvrAE/gozxGQoq6IRW/GFh3SsmFKhpnzMpV3VIpm/hR0oolVzazPUfyARKDRrTEwZvz1cWBSMPsFLdfNdmJ40HXrW5J5StLWXrE=	t	0	1738010876306410	1738010876415190
+933a0194-d241-4320-96da-77f38f5282ef	5e0d052d-64af-4313-9381-917dbcbc59e9	poZVLgZI+XS8AJ9PEkBxw7seK4Td+g05mpqTU6Jwnak=	4gKSQeZK3iKwQvlsH7xjfTKYnoRRqTM3ol5alA82CnqyxSS/Lm7QN3SzinO5PvV02e778kKTBsEyMimhEOOkWzVVUQqu904aDMFokqOk1VEys5wk9ARR3v7alo9DEB2C39Cjdof4QJXmF5V+3F6Wuxzr2JxO0X1rFatXX634bmih1ZOLlCEU8/76qWyQ3lqFatyhsJvBBLQvPw9qOWEXwgJqU+r/nWJD1TseTRKEkJbMElHqHkxdPRIP4b8m35/57fDFg7VEGXP1i49NqUJ6smzLAhfUe2ZF1tHRl3GcUdCj7q0gqWd+NXTEOwsP+Tz3ku6OIwr55mcuTI6B40uYwJSjWfRx+GEKRvCd403SQVXXPtAXef1ScIUVdMyREFY/zutI/yN1+TptKjzIJZR9CyEkKQ8/yMPtuzuv/L1ph/BC3VqZNRUqoumhtWBpWtP0zZnMG1ZC1y4NG1QKw4Pr3RA1ccvdaY27FrkwWAZlUf18IW7G1EVIc5QWr6WCyTT27Lpu+gfAfbw9FSzg6LzF6v6tbO8niVZifWtynpF6tAziocn/5uEexYjg46Kn1lzkC++/d4ItJRZ4VbEM8swUjXaSZNI3lBR0r7iak4dBTaOg8FcqLbHQ1UauwmFs42Z3YgTNzZYP1g7q0nyhpJohRTNpiSbG9LBydcTYuXFvw6c=	t	0	1739698150974828	1739698151085103
 \.
 
 
@@ -1639,6 +1647,7 @@ COPY public.temp_two_factor (user_id, two_factor_secret_hash, encrypted_two_fact
 --
 
 COPY public.tokens (user_id, token, creation_time, ip, user_agent, is_deleted, last_used_at, app) FROM stdin;
+1580559962386438	fJWwIOsSm73vCaS7AZdi47Mv2VZjUnCVGMSEFDrMukc=	1739698151090378	172.19.0.1	Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) ente/1.7.9 Chrome/132.0.6834.194 Electron/34.1.1 Safari/537.36	f	1739698151237235	photos
 \.
 
 
@@ -1679,7 +1688,7 @@ COPY public.two_factor_sessions (user_id, session_id, creation_time, expiration_
 --
 
 COPY public.usage (user_id, storage_consumed) FROM stdin;
-1580559962386438	0
+1580559962386438	37177
 \.
 
 
@@ -1704,14 +1713,14 @@ COPY public.webauthn_sessions (id, challenge, user_id, allowed_credential_ids, e
 -- Name: collections_collection_id_seq; Type: SEQUENCE SET; Schema: public; Owner: pguser
 --
 
-SELECT pg_catalog.setval('public.collections_collection_id_seq', 1580559962386438, false);
+SELECT pg_catalog.setval('public.collections_collection_id_seq', 1580559962386438, true);
 
 
 --
 -- Name: files_file_id_seq; Type: SEQUENCE SET; Schema: public; Owner: pguser
 --
 
-SELECT pg_catalog.setval('public.files_file_id_seq', 10000000, false);
+SELECT pg_catalog.setval('public.files_file_id_seq', 10000000, true);
 
 
 --

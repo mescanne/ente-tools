@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""My Docstring."""
+"""Module for handling encryption and decryption operations using libsodium."""
 
 import logging
 from collections.abc import Callable, Generator
@@ -34,7 +34,7 @@ log = logging.getLogger(__name__)
 
 
 class EnteCryptError(Exception):
-    """DocString."""
+    """Base class for encryption/decryption related errors."""
 
 
 StreamEncryptionSize = 4 * 1024 * 1024
@@ -42,16 +42,42 @@ CHUNK_SIZE = StreamEncryptionSize + crypto_secretstream_xchacha20poly1305_ABYTES
 
 
 class EnteEncryptionError(Exception):
-    """DocString."""
+    """Raised when an encryption operation fails."""
 
 
 def decrypt(key: bytes, nonce: bytes, data: bytes) -> bytes:
-    """DocString."""
+    """Decrypt data using a secret key and nonce.
+
+    Args:
+        key: The secret key used for decryption.
+        nonce: The nonce used for decryption.
+        data: The encrypted data to decrypt.
+
+    Returns:
+        The decrypted data.
+
+    Raises:
+        nacl.exceptions.CryptoError: If the decryption fails.
+
+    """
     return SecretBox(key).decrypt(data, nonce)
 
 
 def decrypt_blob(data: bytes, header: bytes, key: bytes) -> bytes:
-    """DocString."""
+    """Decrypt a blob of data using a secret key and header.
+
+    Args:
+        data: The encrypted data to decrypt.
+        header: The header used for decryption.
+        key: The secret key used for decryption.
+
+    Returns:
+        The decrypted data.
+
+    Raises:
+        EnteEncryptionError: If the key or header length is invalid.
+
+    """
     if len(key) != crypto_secretstream_xchacha20poly1305_KEYBYTES:
         msg = "invalid key length"
         raise EnteEncryptionError(msg)
@@ -76,7 +102,22 @@ def decrypt_stream_to_file(
     header: bytes,
     progress: Callable[[int], None] | None = None,
 ) -> Generator[Callable[[bytes], None]]:
-    """DocString."""
+    """Decrypt a stream of data to a file.
+
+    This function uses a context manager to handle the decryption of a stream of data
+    and write it to a file. It supports progress reporting via a callback function.
+
+    Args:
+        dest: The path to the destination file.
+        key: The secret key used for decryption.
+        header: The header used for decryption.
+        progress: An optional callback function that takes the number of bytes
+            written as an argument.
+
+    Yields:
+        A callable that takes a chunk of encrypted data and decrypts/writes it.
+
+    """
     state = crypto_secretstream_xchacha20poly1305_state()
     crypto_secretstream_xchacha20poly1305_init_pull(state, header, key)
 

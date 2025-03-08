@@ -1,0 +1,24 @@
+
+Next steps:
+- Find what to commit and push;
+- Implement an export:
+  - Take the data structure and make a friendly export;
+  - Add validation (metadata for the same fileID across collections should be the same?)
+
+Objectives:
+- For my current photo collection:
+
+Step 1.
+  - Download photos that do not exist locally
+  - Re-index all photos
+
+Step 2.
+  - Index the photos "albums" from remote (favourites and otherwise)
+  - Download as XMP file with sequence for albums for new files.
+
+Step 3.
+  - Automatically create new collections.
+  - Synchronize the XMP files with sequence for albums.
+
+Step 4.
+  - Investigate upload mechanism.

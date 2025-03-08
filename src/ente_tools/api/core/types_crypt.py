@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""DocString."""
+"""Cryptographic types and utilities for Ente's encryption system."""
 
 import logging
 from base64 import urlsafe_b64decode, urlsafe_b64encode
@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 
 class SPRAttributes(BaseModel):
-    """SPRAAttributes returns key attributes for a user attempting to login."""
+    """Key attributes for a user attempting to login."""
 
     srp_user_id: str = Field(alias="srpUserID")
     srp_salt: str = Field(alias="srpSalt")
@@ -39,7 +39,7 @@ class SPRAttributes(BaseModel):
 
 
 class KeyAttributes(BaseModel):
-    """KeyAttributes contains the encrypted master key, encrypted private key, and associated public key."""
+    """Encrypted master key, encrypted private key, and associated public key."""
 
     kek_salt: str = Field(alias="kekSalt")
     kek_hash: str | None = Field(default="", alias="kekHash")
@@ -53,20 +53,29 @@ class KeyAttributes(BaseModel):
 
 
 class AuthorizationResponse(BaseModel):
-    """Once authorized on the server this contains the encrypted keys and tokens for the user."""
+    """Encrypted keys and tokens for the user after server authorization."""
 
     id: int
     key_attributes: KeyAttributes = Field(alias="keyAttributes")
     encrypted_token: str = Field(alias="encryptedToken")
     token: str | None = Field(default="", alias="token")
     accounts_url: str | None = Field(default="", alias="accountsUrl")
-    two_factor_session_id: str | None = Field(default="", alias="twoFactorSessionID")
-    two_factor_session_idv2: str | None = Field(default="", alias="twoFactorSessionIDV2")
-    passkey_session_id: str | None = Field(default="", alias="passkeySessionID")
+    two_factor_session_id: str | None = Field(
+        default="",
+        alias="twoFactorSessionID",
+    )
+    two_factor_session_idv2: str | None = Field(
+        default="",
+        alias="twoFactorSessionIDV2",
+    )
+    passkey_session_id: str | None = Field(
+        default="",
+        alias="passkeySessionID",
+    )
 
 
 class EnteKeys(BaseModel):
-    """DocString."""
+    """Core encryption keys for an Ente account."""
 
     user_id: int
     master_key: bytes
@@ -75,7 +84,7 @@ class EnteKeys(BaseModel):
     public_key: bytes
 
     def unseal(self, data: bytes) -> bytes:
-        """DocString."""
+        """Unseal data using the public and secret keys."""
         return crypto_box_seal_open(
             data,
             self.public_key,
@@ -119,14 +128,14 @@ class EnteKeys(BaseModel):
 
 
 class SecretPair(BaseModel):
-    """DocString."""
+    """An encrypted secret and its associated nonce."""
 
     encrypted: str
     nonce: str
 
     @staticmethod
     def encrypt(key: bytes, msg: bytes) -> "SecretPair":
-        """DocString."""
+        """Encrypt a message with a given key and generate a nonce."""
         nonce = random(SecretBox.NONCE_SIZE)
         return SecretPair(
             encrypted=str(urlsafe_b64encode(SecretBox(key).encrypt(msg, nonce).ciphertext), "utf-8"),
@@ -139,7 +148,7 @@ class SecretPair(BaseModel):
 
 
 class EnteEncKeys(BaseModel):
-    """DocString."""
+    """Device-encrypted version of EnteKeys for secure storage."""
 
     user_id: int
     master_key: SecretPair
@@ -149,7 +158,7 @@ class EnteEncKeys(BaseModel):
 
     @staticmethod
     def from_keys(device_key: bytes, keys: EnteKeys) -> "EnteEncKeys":
-        """DocString."""
+        """Encrypt EnteKeys using a device key for secure storage."""
         return EnteEncKeys(
             user_id=keys.user_id,
             master_key=SecretPair.encrypt(device_key, keys.master_key),
