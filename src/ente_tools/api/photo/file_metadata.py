@@ -45,10 +45,10 @@ class Media(BaseModel):
     # this needs to operate load and reload xmp (same for video vs image)
     def load_xmp_sidecars(self, sidecar: NewLocalDiskFile) -> None:
         """DocString."""
-        self.xmp_sidecars = NewXMPDiskFile.from_file(sidecar)
+        self.xmp_sidecar = NewXMPDiskFile.from_file(sidecar)
 
 
-def refresh(sync_dir: str, previous: list[Media] | None = None) -> list[Media]:  # noqa: C901, PLR0912
+def refresh(sync_dir: str, previous: list[Media] | None = None, workers: int | None = None) -> list[Media]:  # noqa: C901, PLR0912
     """DocString."""
     # Index previous files
     existing_files: dict[str, Media] = {}
@@ -132,7 +132,7 @@ def refresh(sync_dir: str, previous: list[Media] | None = None) -> list[Media]: 
     for subtype, tasks in scan_files.items():
         log.info("Found new %d %s files", len(tasks), subtype.__name__)
     if redo_sidecars:
-        log.info("Found %d updated metadata")
+        log.info("Found %d updated metadata", len(redo_sidecars))
 
     # Process each type
     for subtype, tasks in scan_files.items():
@@ -148,7 +148,7 @@ def refresh(sync_dir: str, previous: list[Media] | None = None) -> list[Media]: 
                 xmp_sidecar=NewXMPDiskFile.from_file(task[1]) if task[1] else None,
             )
 
-        with ThreadPoolExecutor() as e:
+        with ThreadPoolExecutor(max_workers=workers) as e:
             good.extend(
                 r
                 for r in track(

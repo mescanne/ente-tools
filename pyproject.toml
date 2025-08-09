@@ -27,6 +27,8 @@ dependencies = [
     "pyright",
     "jinja2>=3.1.5",
     "pytest-emoji>=0.2.0",
+    # Temporary to experiment with an alternative backend
+    "sqlmodel>=0.0.24",
 ]
 license = "Apache-2.0"
 license-files = ["LICENSE"]

@@ -99,17 +99,46 @@ class EnteClient:
 
         show_files("All", self.data.local)
 
-        rfiles = {f.metadata["hash"]: f for acc in self.data.accounts for c, files in acc.files.items() for f in files}
+        rfiles = {
+            f.metadata.get("hash", ""): f for acc in self.data.accounts for c, files in acc.files.items() for f in files
+        }
 
         show_files("Sync'd:", [f for f in self.data.local if f.media.hash in rfiles])
         show_files("Needs to be uploaded:", [f for f in self.data.local if f.media.hash not in rfiles])
 
         lfiles = {f.media.hash: f for f in self.data.local}
+
+        show_files(
+            "Duplicated:",
+            [
+                f
+                for f in self.data.local
+                if f.media.hash in lfiles and f.media.file.fullpath != lfiles[f.media.hash].media.file.fullpath
+            ],
+        )
+
+        lfiles = {f.media.data_hash: f for f in self.data.local}
+
+        show_files(
+            "Data Duplicated:",
+            [
+                f
+                for f in self.data.local
+                if f.media.data_hash in lfiles
+                and f.media.file.fullpath != lfiles[f.media.data_hash].media.file.fullpath
+            ],
+        )
+
         for acc in self.data.accounts:
+            to_download = [
+                f for c, files in acc.files.items() for f in files if f.metadata.get("hash", "") not in lfiles
+            ]
+            to_size = sum([f.info.file_size for f in to_download if f.info is not None])
             log.info(
-                "Account %s files to download: %d",
+                "Account %s files to download %d (%s)",
                 acc.email,
-                len([f for c, files in acc.files.items() for f in files if f.metadata["hash"] not in lfiles]),
+                len(to_download),
+                humanize.naturalsize(to_size),
             )
 
     def link(self, email: str, *, unlink: bool = False) -> None:
@@ -142,14 +171,18 @@ class EnteClient:
                 len(acc.files),
             )
 
-    def local_refresh(self, sync_dir: str, *, force_refresh: bool = False) -> None:
+    def local_export(self) -> None:
+        """Export the local files."""
+        previous = self.data.local
+
+    def local_refresh(self, sync_dir: str, *, force_refresh: bool = False, workers: int | None = None) -> None:
         """Refresh the local data by scanning the specified directory for media files."""
         previous = self.data.local
         if force_refresh:
             previous = None
 
         log.info("Refreshing dir %s", sync_dir)
-        self.data.local = refresh(sync_dir, previous)
+        self.data.local = refresh(sync_dir, previous, workers=workers)
         log.info("Refreshed dir %s", sync_dir)
 
     # TODO(scannell): Jinja template needs a way to deal with duplicates, e.g., making it unique

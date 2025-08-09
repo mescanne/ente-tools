@@ -101,6 +101,7 @@ def refresh(
     ctxt: typer.Context,
     force_refresh: Annotated[bool, typer.Option()] = False,  # noqa: FBT002
     email: Annotated[str | None, typer.Option()] = None,
+    workers: Annotated[int | None, typer.Option()] = None,
 ) -> None:
     """Refresh both remote and local data."""
     with load(ctxt.obj["database"], EnteData, max_vers=ctxt.obj["max_vers"]) as data:
@@ -109,7 +110,21 @@ def refresh(
 
     with load(ctxt.obj["database"], EnteData, max_vers=ctxt.obj["max_vers"]) as data:
         client = get_client(ctxt, data)
-        client.local_refresh(ctxt.obj["sync_dir"], force_refresh=force_refresh)
+        client.local_refresh(ctxt.obj["sync_dir"], force_refresh=force_refresh, workers=workers)
+
+
+@app.command()
+def export(ctxt: typer.Context) -> None:
+    """Export local data."""
+    with load(ctxt.obj["database"], EnteData, skip_save=True) as data:
+        log.info("Exporting")
+        for m in data.local:
+            # print(m.xmp_sidecar)
+            print(m.media.file.fullpath)
+            print(m.media.hash)
+            print(m.media.data_hash)
+            print(m.media.media_type)
+            # print(m.media.metadata)
 
 
 @app.command()

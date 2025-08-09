@@ -56,10 +56,10 @@ class NewImageFile(MetadataModel):
             A NewImageFile instance if successful, None otherwise.
 
         """
+        metadata: dict[str, DictTypes] = {}
         try:
             with Image.open(file.fullpath) as img:
                 # Extract metadata
-                metadata: dict[str, DictTypes] = {}
                 assign_to_dict(metadata, "XMP", img.getxmp())
                 exif_data = img.getexif()
                 metadata.update({f"Base:{ExifTags.TAGS.get(k, k)}": str(v) for k, v in exif_data.items()})
@@ -93,10 +93,18 @@ class NewImageFile(MetadataModel):
                 )
 
         except Exception as e:  # noqa: BLE001
+            log.warning("metadata: %s", metadata)
             log.warning("failed extracting image metadata from '%s': %s", file.fullpath, e)
             log.critical(e, exc_info=True)
 
-        return None
+            return cls(
+                file=file,
+                hash=hash_file(file.fullpath),
+                data_hash=None,
+                metadata={
+                    "Error": str(e),
+                },
+            )
 
     def get_location(self) -> str | None:
         """Get the location metadata of the image.
@@ -154,6 +162,15 @@ class NewAVFile(MetadataModel):
             log.warning("Failed parsing video metadata from %s: %s", file.fullpath, e)
             log.critical(e, exc_info=True)
 
+            return cls(
+                file=file,
+                hash=hash_file(file.fullpath),
+                data_hash=None,
+                metadata={
+                    "Error": str(e),
+                },
+            )
+
         return None
 
     def get_location(self) -> str | None:
@@ -205,6 +222,7 @@ class NewXMPDiskFile(MetadataModel):
 
         Returns:
             The location string if available, None otherwise.
+
 
         """
         return None
@@ -321,7 +339,7 @@ def assign_to_dict_element(new_dict: dict[str, DictTypes], key: str, value: ET.E
         assign_to_dict_element(new_dict, new_key, child)
 
 
-def assign_to_dict(new_dict: dict[str, DictTypes], key: str, value: DictTypes) -> None:
+def assign_to_dict(new_dict: dict[str, DictTypes], key: str, value: DictTypes | None) -> None:
     """Assign data to a dictionary, handling nested dictionaries and lists.
 
     Args:
@@ -333,13 +351,16 @@ def assign_to_dict(new_dict: dict[str, DictTypes], key: str, value: DictTypes) -
         None.
 
     """
+    if value is None:
+        return
+
     if isinstance(value, dict):
         for k, v in value.items():
-            assign_to_dict(new_dict, key + ":" + str(k), v)
+            assign_to_dict(new_dict, str(key) + ":" + str(k), v)
 
     elif isinstance(value, list):
         for i in range(len(value)):
-            assign_to_dict(new_dict, key + ":" + str(i), value[i])
+            assign_to_dict(new_dict, str(key) + ":" + str(i), value[i])
 
     else:
         new_dict[get_unique_key(new_dict, key)] = value
