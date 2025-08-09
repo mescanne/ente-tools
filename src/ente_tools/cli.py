@@ -119,12 +119,10 @@ def export(ctxt: typer.Context) -> None:
     with load(ctxt.obj["database"], EnteData, skip_save=True) as data:
         log.info("Exporting")
         for m in data.local:
-            # print(m.xmp_sidecar)
-            print(m.media.file.fullpath)
-            print(m.media.hash)
-            print(m.media.data_hash)
-            print(m.media.media_type)
-            # print(m.media.metadata)
+            log.info(m.media.file.fullpath)
+            log.info(m.media.hash)
+            log.info(m.media.data_hash)
+            log.info(m.media.media_type)
 
 
 @app.command()

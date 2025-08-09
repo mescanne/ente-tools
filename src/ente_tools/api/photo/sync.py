@@ -173,7 +173,6 @@ class EnteClient:
 
     def local_export(self) -> None:
         """Export the local files."""
-        previous = self.data.local
 
     def local_refresh(self, sync_dir: str, *, force_refresh: bool = False, workers: int | None = None) -> None:
         """Refresh the local data by scanning the specified directory for media files."""
