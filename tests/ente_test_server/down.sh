@@ -2,6 +2,6 @@
 
 cd "$(dirname $0)"
 
-export INITSQL=""
+export STATE=""
 
 docker compose down --remove-orphans --volumes

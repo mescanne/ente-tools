@@ -1,4 +1,4 @@
-# Copyright 2024 Mark Scannell
+# Copyright 2025 Mark Scannell
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,11 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""DocString."""
+"""Core functionality for managing Ente accounts and authentication."""
 
 import getpass
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 from pydantic import BaseModel
 
@@ -29,7 +30,19 @@ log = logging.getLogger(__name__)
 
 
 def retry[T](f: Callable[[], T], onretry: Callable[[], None] | None = None, retries: int = 3) -> T:
-    """DocString."""
+    """Retry a function call multiple times if it raises an EnteAPIError.
+
+    This function attempts to call the provided function `f` up to `retries` times.
+    If `f` raises an `EnteAPIError`, the `onretry` callback is called (if provided),
+    and the function is retried. If the function still fails after the specified
+    number of retries, the last exception is raised.
+
+    Args:
+        f: The function to call.
+        onretry: An optional callback function to call on each retry.
+        retries: The maximum number of retries.
+
+    """
     for _ in range(1, retries):
         try:
             return f()
@@ -40,22 +53,49 @@ def retry[T](f: Callable[[], T], onretry: Callable[[], None] | None = None, retr
 
 
 class EnteAccount(BaseModel):
-    """DocString."""
+    """Represents an authenticated Ente account.
+
+    This class encapsulates the state of an authenticated Ente account, including
+    user details, cryptographic keys, and synchronized collections and files.
+
+    """
 
     email: str
+    """The email address associated with the account."""
     attributes: SPRAttributes
+    """The SRP attributes for the account."""
     auth_response: AuthorizationResponse
+    """The authorization response from the server."""
     encrypted_keys: EnteEncKeys
+    """The device-encrypted Ente keys."""
     collections: list[Collection]
-    files: list[File]
+    """The list of collections in the account."""
+    files: dict[int, list[File]]
+    """The files in the account, organized by collection ID."""
 
     def keys(self) -> EnteKeys:
-        """DocString."""
+        """Retrieve the decrypted Ente keys for the account.
+
+        This method decrypts the device-encrypted Ente keys using the device key.
+
+        Returns:
+            The decrypted EnteKeys.
+
+        """
         return self.encrypted_keys.to_keys(get_device_key())
 
     @staticmethod
     def authenticate(api: EnteAPI, email: str) -> "EnteAccount":
-        """DocString."""
+        """Authenticate an Ente account and create an EnteAccount instance.
+
+        This method handles the authentication process with the Ente API, including
+        sending an email OTP, verifying the OTP, and retrieving the user's keys.
+
+        Args:
+            api: The EnteAPI client.
+            email: The email address of the account.
+
+        """
         # Get attributes of the account. This is public.
         attributes = api.attributes(email)
 
@@ -82,13 +122,26 @@ class EnteAccount(BaseModel):
             auth_response=auth_response,
             encrypted_keys=EnteEncKeys.from_keys(get_device_key(), keys),
             collections=[],
-            files=[],
+            files={},
         )
 
     def refresh(self, api: EnteAPI, *, force_refresh: bool = False) -> None:
-        """DocString."""
+        """Refresh the account's collections and files from the Ente API.
+
+        This method synchronizes the local state of the account with the remote
+        state on the Ente servers. It fetches updated collections and files,
+        decrypts them, and updates the local data structures.
+
+        Args:
+            api: The EnteAPI client.
+            force_refresh: If True, forces a full refresh, ignoring any
+                previous update times.
+
+        Raises:
+            EnteAPIError: If there is an error communicating with the Ente API.
+
+        """
         cmap = {c.id: c for c in self.collections} if not force_refresh else {}
-        fmap = {f.id: f for f in self.files} if not force_refresh else {}
 
         # Fetch the clear-text keys (in-memory only)
         keys = self.keys()
@@ -103,7 +156,10 @@ class EnteAccount(BaseModel):
                 update_time = max(collection.update_time, update_time)
 
         # Fetch the updated collections
-        log.info("Requesting updates since %d", update_time)
+        log.info(
+            "Requesting updates since %s",
+            datetime.fromtimestamp(update_time / 1000000, tz=UTC).strftime("%Y/%m/%d %H:%M:%S"),
+        )
         updated_collections = [c.to_collection(keys) for c in api.get_collections(since=update_time)]
 
         # Update
@@ -112,6 +168,12 @@ class EnteAccount(BaseModel):
             if c.id not in cmap and c.is_deleted:
                 continue
 
+            # Create filemap of existing files
+            fmap = {}
+            if c.id in self.files and not force_refresh:
+                fmap = {f.id: f for f in self.files[c.id]}
+
+            # Decrypt the collection key
             ckey = c.enc_collection_key.decrypt()
 
             # Find out last update time for collection
@@ -128,6 +190,6 @@ class EnteAccount(BaseModel):
 
             # Save it
             cmap[c.id] = c
+            self.files[c.id] = list(fmap.values())
 
         self.collections = list(cmap.values())
-        self.files = list(fmap.values())

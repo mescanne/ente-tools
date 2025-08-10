@@ -10,13 +10,25 @@ dependencies = [
     "httpx>=0.28.1",
     "pydantic>=2.10.5",
     "keyring>=25.6.0",
-
     # CLI (+ pydantic)
     "platformdirs>=4.3.6",
     "rich>=13.9.4",
     "typer>=0.15.1",
     "typer-config[toml]>=1.4.2",
     "humanize>=4.11.0",
+    "pytest-cov>=6.0.0",
+    "pillow[defusedxml]>=11.1.0",
+    "av>=14.1.0",
+    "defusedxml>=0.7.1",
+    "python-xmp-toolkit>=2.0.2",
+    "pyffmpeg==2.4.2.20",
+    "pyexiftool>=0.5.6",
+    "pillow-heif>=0.21.0",
+    "pyright",
+    "jinja2>=3.1.5",
+    "pytest-emoji>=0.2.0",
+    # Temporary to experiment with an alternative backend
+    "sqlmodel>=0.0.24",
 ]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -68,4 +80,6 @@ dev = [
     "pytest-md>=0.2.0",
     "pytest>=8.3.4",
     "testcontainers>=4.9.1",
+    "pyright",
+    "ruff>=0.9.6",
 ]

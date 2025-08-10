@@ -1,4 +1,4 @@
-# Copyright 2024 Mark Scannell
+# Copyright 2025 Mark Scannell
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,11 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""DocString."""
+"""Data models for Ente files and their encrypted variants."""
 
 import json
 import logging
-from base64 import b64decode
+from base64 import urlsafe_b64decode
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -28,30 +28,39 @@ log = logging.getLogger(__name__)
 
 
 class FileInfo(BaseModel):
-    """DocString."""
+    """Basic file information including size details."""
 
     file_size: int = Field(alias="fileSize")
     thumb_size: int = Field(alias="thumbSize")
 
 
 class FileAttributes(BaseModel):
-    """DocString."""
+    """Encrypted file data and associated decryption information."""
 
     encrypted_data: str | None = Field(default=None, alias="encryptedData")
     decryption_header: str = Field(alias="decryptionHeader")
 
     def decrypt(self, key: bytes) -> dict[str, Any]:
-        """DocString."""
-        if not self.encrypted_data:
+        """Decrypt the encrypted data using the provided key.
+
+        Args:
+            key: The decryption key as bytes
+
+        Returns:
+            A dictionary containing the decrypted data, or
+            empty dict if no encrypted data
+
+        """
+        if not self.encrypted_data or self.encrypted_data == "-":
             return {}
 
-        blob = decrypt_blob(b64decode(self.encrypted_data), b64decode(self.decryption_header), key)
+        blob = decrypt_blob(urlsafe_b64decode(self.encrypted_data), urlsafe_b64decode(self.decryption_header), key)
 
         return json.loads(str(blob, "utf-8"))
 
 
 class File(BaseModel):
-    """DocString."""
+    """Decrypted file information."""
 
     id: int
     owner_id: int
@@ -65,11 +74,11 @@ class File(BaseModel):
     update_time: int
     magic_metadata: dict[str, Any]
     pub_magic_metadata: dict[str, Any]
-    info: FileInfo
+    info: FileInfo | None = Field(default=None)
 
 
 class EncryptedFile(BaseModel):
-    """DocString."""
+    """Encrypted file information as received from the server."""
 
     id: int
     owner_id: int = Field(alias="ownerID")
@@ -82,18 +91,43 @@ class EncryptedFile(BaseModel):
     metadata: FileAttributes
     is_deleted: bool = Field(alias="isDeleted")
     update_time: int = Field(alias="updationTime")
-    magic_metadata: MagicMetadata | None = Field(default=None, alias="magicMetadata")
-    pub_magic_metadata: MagicMetadata | None = Field(default=None, alias="pubMagicMetadata")
-    info: FileInfo
+    magic_metadata: MagicMetadata | None = Field(
+        default=None,
+        alias="magicMetadata",
+    )
+    pub_magic_metadata: MagicMetadata | None = Field(
+        default=None,
+        alias="pubMagicMetadata",
+    )
+    info: FileInfo | None = Field(default=None)
 
     def file_key(self, collection_key: bytes) -> bytes:
-        """DocString."""
-        return decrypt(collection_key, b64decode(self.key_decryption_nonce), b64decode(self.encrypted_key))
+        """Decrypt the file's encryption key using the collection key.
+
+        Args:
+            collection_key: The collection's decryption key
+
+        Returns:
+            The decrypted file key as bytes
+
+        """
+        return decrypt(
+            collection_key,
+            urlsafe_b64decode(self.key_decryption_nonce),
+            urlsafe_b64decode(self.encrypted_key),
+        )
 
     def to_file(self, collection_key: bytes) -> File:
-        """DocString."""
-        key = self.file_key(collection_key)
+        """Convert encrypted file to decrypted File object.
 
+        Args:
+            collection_key: The collection's decryption key
+
+        Returns:
+            A File object containing the decrypted data
+
+        """
+        key = self.file_key(collection_key)
         metadata = self.metadata.decrypt(key) if self.metadata else {}
         pub_metadata = self.pub_magic_metadata.decrypt(key) if self.pub_magic_metadata else {}
         magic_metadata = self.magic_metadata.decrypt(key) if self.magic_metadata else {}

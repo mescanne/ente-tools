@@ -1,4 +1,4 @@
-# Copyright 2024 Mark Scannell
+# Copyright 2025 Mark Scannell
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,14 +38,14 @@ TEST_COMPOSE_DIR = Path(__file__).parent
 class EnteServer(DockerCompose):
     """DocString."""
 
-    def __init__(self, init_sql: str = "init.sql") -> None:
+    def __init__(self, state: str = "base") -> None:
         """DocString."""
-        os.environ["INITSQL"] = init_sql
+        os.environ["STATE"] = state
 
         # set the keyring for test device key
         keyring.set_keyring(TestKeyring())
 
-        log.info("Starting ente test server with init sql %s", init_sql)
+        log.info("Creating ente test server with state %s", state)
 
         super().__init__(context=TEST_COMPOSE_DIR, compose_file_name="compose.yaml")
 
@@ -70,6 +70,7 @@ class EnteServer(DockerCompose):
 
     def start(self) -> None:
         """DocString."""
+        log.info("Starting ente test server")
         super().start()
 
         self._wait_for_ping()
@@ -80,7 +81,7 @@ class EnteServer(DockerCompose):
             data=data,
             api_url=self.get_api_url(),
             api_account_url=self.get_api_url(),
-            api_download_url=self.get_object_url(),
+            api_download_url=self.get_api_url() + "/files/download/",
         )
 
     def get_otp(self) -> str:
@@ -94,11 +95,13 @@ class EnteServer(DockerCompose):
     def get_api_url(self) -> str:
         """DocString."""
         host, port = self.get_service_host_and_port("museum", 8080)
+        log.info("api url host and port: %s %d", host, port)
         return f"http://{host}:{port}"
 
     def get_object_url(self) -> str:
         """DocString."""
         host, port = self.get_service_host_and_port("minio", 3200)
+        log.info("object url http://%s:%d", host, port)
         return f"http://{host}:{port}"
 
 

@@ -1,5 +1,8 @@
 # Python files
 .venv
+.coverage
 .ruff_cache
+.pytest_cache
 **/__pycache__/**
 dist/**
+*.jpg

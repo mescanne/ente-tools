@@ -1,4 +1,4 @@
-# Copyright 2024 Mark Scannell
+# Copyright 2025 Mark Scannell
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 log = logging.getLogger(__name__)
 
@@ -28,15 +28,20 @@ log = logging.getLogger(__name__)
 @contextmanager
 def load[T: BaseModel](dbfile: str, model: type[T], *, skip_save: bool = False, max_vers: int = 10) -> Generator[T]:
     """DocString."""
+    data: T
+
     path = Path(dbfile)
 
-    data: T
-    if not path.is_file():
-        data = model.model_construct()
-    else:
-        with gzip.open(path, "rt") as f:
-            data = model.model_validate_json(f.read())
-        log.info("Loaded data from %s", path)
+    try:
+        if not path.is_file():
+            data = model.model_construct()
+        else:
+            with gzip.open(path, "rt") as f:
+                data = model.model_validate_json(f.read())
+            log.info("Loaded data from %s", path)
+    except ValidationError:
+        log.exception("Failed loading data from %s", path)
+        raise
 
     # Yield to the context
     # If there is an exception, it won't be saved
@@ -67,7 +72,7 @@ def load[T: BaseModel](dbfile: str, model: type[T], *, skip_save: bool = False, 
 
         # Delete max version if it exists
         max_path = Path(str(path) + f".{max_vers}")
-        if max_path.exists():
+        if max_vers > 0 and max_path.exists():
             max_path.unlink()
 
         # Rename previous versions

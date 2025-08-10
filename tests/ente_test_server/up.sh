@@ -2,17 +2,16 @@
 
 cd "$(dirname $0)"
 
-export INITSQL="${INITSQL:-init.sql}"
+if [ $# != 1 ]; then
+	echo "Specify state to use. base is the typical starting state."
+	exit 1
+fi
 
-echo "Starting with init sql ${INITSQL}"
+export STATE="$1"
+
+echo "Starting with state ${STATE}"
 
 docker compose up -d --force-recreate
 
-echo -n "Minio port:             "
-docker ps --filter 'name=minio' --format '{{.Ports}}' | awk '{print $2}' | cut -f1 -d'-'
-
-echo -n "Museum (Ente API) port: "
-docker ps --filter 'name=museum' --format '{{.Ports}}' | awk '{print $1}' | cut -f1 -d'-'
-
-echo -n "Postgres port:          "
-docker ps --filter 'name=postgres' --format '{{.Ports}}' | awk '{print $1}' | cut -f1 -d'-'
+ENTE_PORT=$(docker ps --filter 'name=museum' --format '{{.Ports}}' | awk '{print $1}' | cut -f1 -d'-' | cut -f2 -d':')
+echo "Ente URL: http://localhost:${ENTE_PORT}"

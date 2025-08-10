@@ -3,14 +3,18 @@
 # Script used to prepare the minio instance that runs as part of the development
 # Docker compose cluster.
 
+# Configure connection
 while ! mc config host add h0 http://minio:3200 test testtest
 do
    echo "waiting for minio..."
    sleep 0.5
 done
 
-cd /data
+# Initialize data in the bucket
+for bucket in b2-eu-cen wasabi-eu-central-2-v3 scw-eu-fr-v3; do
+	mc mb -p ${bucket}
+	test -d /state/${bucket} && mc cp -r /state/${bucket}/* h2/${bucket}
+done
 
-mc mb -p b2-eu-cen
-mc mb -p wasabi-eu-central-2-v3
-mc mb -p scw-eu-fr-v3
+server /data --address ":3200" --console-address ":3201"
+

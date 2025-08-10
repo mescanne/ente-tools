@@ -1,4 +1,4 @@
-# Copyright 2024 Mark Scannell
+# Copyright 2025 Mark Scannell
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Docstring."""
+"""Device-specific encryption key management for Ente."""
 
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from functools import cache
@@ -27,7 +27,16 @@ USER = "device-key"
 
 @cache
 def get_device_key() -> bytes:
-    """DocString."""
+    """Retrieve the device-specific encryption key.
+
+    This function retrieves the device key from the system's keyring. If the key
+    does not exist, it generates a new one, stores it in the keyring, and then
+    returns it.
+
+    Returns:
+        bytes: The device-specific encryption key.
+
+    """
     encoded = keyring.get_password(SERVICE, USER)
     if not encoded:
         device_key = random(SecretBox.KEY_SIZE)
@@ -37,14 +46,27 @@ def get_device_key() -> bytes:
 
 
 class DeviceSecret(BaseModel):
-    """DocString."""
+    """Encrypted data that can only be decrypted using the device key."""
 
     encrypted: str
+    """The encrypted data, base64 encoded."""
     nonce: str
+    """The nonce used for encryption, base64 encoded."""
 
     @staticmethod
     def encrypt(msg: bytes) -> "DeviceSecret":
-        """DocString."""
+        """Encrypt a message using the device key.
+
+        This method encrypts the provided message using the device-specific
+        encryption key and a randomly generated nonce.
+
+        Args:
+            msg (bytes): The message to encrypt.
+
+        Returns:
+            DeviceSecret: An object containing the encrypted message and the nonce.
+
+        """
         nonce = random(SecretBox.NONCE_SIZE)
         return DeviceSecret(
             encrypted=str(urlsafe_b64encode(SecretBox(get_device_key()).encrypt(msg, nonce).ciphertext), "utf-8"),
@@ -52,7 +74,18 @@ class DeviceSecret(BaseModel):
         )
 
     def decrypt(self) -> bytes:
-        """DocString."""
+        """Decrypt the encrypted data using the device key.
+
+        This method decrypts the encrypted data using the device-specific
+        encryption key and the stored nonce.
+
+        Returns:
+            bytes: The decrypted message.
+
+        Raises:
+            nacl.exceptions.CryptoError: If the decryption fails.
+
+        """
         return SecretBox(get_device_key()).decrypt(
             urlsafe_b64decode(self.encrypted),
             nonce=urlsafe_b64decode(self.nonce),

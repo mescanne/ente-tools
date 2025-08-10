@@ -1,4 +1,4 @@
-# Copyright 2024 Mark Scannell
+# Copyright 2025 Mark Scannell
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Base Python
-"""DocString."""
+"""Core API client for interacting with Ente's backend services."""
 
 import logging
 from base64 import urlsafe_b64decode, urlsafe_b64encode
@@ -32,11 +31,11 @@ log = logging.getLogger(__name__)
 
 
 class EnteAPIError(Exception):
-    """DocString."""
+    """Exception raised for errors when interacting with the Ente API."""
 
 
 class EnteAPI:
-    """DocString."""
+    """Client for making authenticated requests to the Ente API endpoints."""
 
     def __init__(
         self,
@@ -46,12 +45,24 @@ class EnteAPI:
         api_download_url: str,
         token: bytes | None = None,
     ) -> None:
-        """DocString."""
+        """Initialize the EnteAPI client.
+
+        Args:
+            pkg: The client package identifier.
+            api_url: The base URL for the Ente API.
+            api_account_url: The base URL for the Ente account API.
+            api_download_url: The base URL for file downloads.
+            token: An optional authentication token.
+
+        """
         self.pkg = pkg
         self.api_url = api_url
         self.api_account_url = api_account_url
         self.api_download_url = api_download_url
         self.token = token
+        """The authentication token for API requests."""
+        self.headers: dict[str, str]
+        """The headers for API requests."""
         self._update_headers()
 
     def set_token(self, token: bytes | None = None) -> None:
@@ -104,13 +115,26 @@ class EnteAPI:
         self._post("/users/ott", data={"email": email})
 
     def verify_email_otp(self, email: str, otp: str) -> AuthorizationResponse:
-        """DocString."""
+        """Verify an email OTP and return the authorization response.
+
+        Args:
+            email: The email address to verify.
+            otp: The one-time password (OTP) to verify.
+
+        Returns:
+            The authorization response from the server.
+
+        """
         return AuthorizationResponse.model_validate(
             self._post("/users/verify-email", data={"email": email, "ott": otp}),
         )
 
     def get_user_details(self) -> None:
-        """DocString."""
+        """Retrieve and log user details.
+
+        This method retrieves user details from the server and logs them.
+
+        """
         log.info("User details: %s", str(self._get("/users/details/v2", {})))
 
     def attributes(self, email: str) -> SPRAttributes:
@@ -118,7 +142,15 @@ class EnteAPI:
         return SPRAttributes.model_validate(self._get("/users/srp/attributes", data={"email": email})["attributes"])
 
     def get_collections(self, since: int = 0) -> list[EncryptedCollection]:
-        """DocString."""
+        """Retrieve a list of collections from the server.
+
+        Args:
+            since: The timestamp to retrieve collections since.
+
+        Returns:
+            A list of encrypted collections.
+
+        """
         # Get list of collections
         collections = self._get("/collections/v2", data={"sinceTime": str(since)})["collections"]
 
@@ -126,7 +158,18 @@ class EnteAPI:
         return [EncryptedCollection.model_validate(c) for c in collections]
 
     def get_files(self, collection_id: int, since: int) -> tuple[list[EncryptedFile], bool]:
-        """DocString."""
+        """Retrieve a list of files from a specific collection.
+
+        Args:
+            collection_id: The ID of the collection to retrieve files from.
+            since: The timestamp to retrieve files since.
+
+        Returns:
+            A tuple containing:
+                - A list of encrypted files.
+                - A boolean indicating if there are more files to retrieve.
+
+        """
         # Get list of files
         result = self._get(
             "/collections/v2/diff",
@@ -142,7 +185,16 @@ class EnteAPI:
         return (files, result["hasMore"])
 
     def get_file(self, collection_id: int, file_id: int) -> EncryptedFile:  # noqa: ARG002
-        """DocString."""
+        """Retrieve a specific file from a collection.
+
+        Args:
+            collection_id: The ID of the collection the file belongs to.
+            file_id: The ID of the file to retrieve.
+
+        Returns:
+            The encrypted file.
+
+        """
         msg = "unimplemented"
         raise EnteAPIError(msg)
 
@@ -150,7 +202,17 @@ class EnteAPI:
     def _download_file(self, file_id: int, handle: Callable[[bytes], None], chunk_size: int | None = None) -> None:
         """DocString."""
         url = f"{self.api_download_url}{file_id}"
-        with httpx.stream("GET", url, headers=self.headers) as r:
+        """Download a file from the server.
+
+        Args:
+            file_id: The ID of the file to download.
+            handle: A callable to handle each chunk of data received.
+            chunk_size: The size of each chunk to download.
+
+        Raises:
+            EnteAPIError: If the server returns an invalid status code.
+        """
+        with httpx.stream("GET", url, follow_redirects=True, headers=self.headers) as r:
             for data in r.iter_bytes(chunk_size=chunk_size):
                 if r.status_code != HTTPStatus.OK:
                     msg = f"invalid status from URL {url}: {r.status_code}: {str(data, 'utf-8')}"
@@ -159,7 +221,16 @@ class EnteAPI:
 
     # TODO(scannell): Handle retries with status code 429, >= 500.
     def download_file(self, file: File, dest: Path) -> None:
-        """DocString."""
+        """Download a file from the server and decrypt it.
+
+        Args:
+            file: The file metadata.
+            dest: The destination path to save the decrypted file.
+
+        Raises:
+            EnteAPIError: If the server returns an invalid status code.
+
+        """
         with decrypt_stream_to_file(
             dest,
             key=file.enc_file_key.decrypt(),

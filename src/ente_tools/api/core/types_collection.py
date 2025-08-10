@@ -1,4 +1,4 @@
-# Copyright 2024 Mark Scannell
+# Copyright 2025 Mark Scannell
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,11 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""DocString."""
+"""Data models for Ente collections and their encrypted variants."""
 
 import json
 import logging
-from base64 import b64decode
+from base64 import urlsafe_b64decode
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 
 class CollectionUser(BaseModel):
-    """DocString."""
+    """User information associated with a collection."""
 
     id: int
     email: str
@@ -36,7 +36,7 @@ class CollectionUser(BaseModel):
 
 
 class MagicMetadata(BaseModel):
-    """DocString."""
+    """Encrypted metadata associated with collections and files."""
 
     version: int
     count: int
@@ -45,13 +45,13 @@ class MagicMetadata(BaseModel):
 
     def decrypt(self, key: bytes) -> dict[str, Any]:
         """DocString."""
-        blob = decrypt_blob(b64decode(self.data), b64decode(self.header), key)
+        blob = decrypt_blob(urlsafe_b64decode(self.data), urlsafe_b64decode(self.header), key)
 
         return json.loads(str(blob, "utf-8"))
 
 
 class Collection(BaseModel):
-    """DocString."""
+    """Decrypted collection information."""
 
     id: int
     owner: CollectionUser
@@ -67,7 +67,7 @@ class Collection(BaseModel):
 
 
 class EncryptedCollection(BaseModel):
-    """DocString."""
+    """Encrypted collection information as received from the server."""
 
     id: int
     owner: CollectionUser
@@ -92,10 +92,14 @@ class EncryptedCollection(BaseModel):
                 raise EnteCryptError(msg)
 
             # Decrypt it with the master key
-            return decrypt(key.master_key, b64decode(self.key_decryption_nonce), b64decode(self.encrypted_key))
+            return decrypt(
+                key.master_key,
+                urlsafe_b64decode(self.key_decryption_nonce),
+                urlsafe_b64decode(self.encrypted_key),
+            )
 
         # Unseal it as a shared key
-        return key.unseal(b64decode(self.encrypted_key))
+        return key.unseal(urlsafe_b64decode(self.encrypted_key))
 
     def to_collection(self, ente_key: EnteKeys) -> Collection:
         """DocString."""
@@ -103,7 +107,10 @@ class EncryptedCollection(BaseModel):
 
         name = self.name
         if self.encrypted_name and self.name_decryption_nonce:
-            name = str(decrypt(key, b64decode(self.name_decryption_nonce), b64decode(self.encrypted_name)), "utf-8")
+            name = str(
+                decrypt(key, urlsafe_b64decode(self.name_decryption_nonce), urlsafe_b64decode(self.encrypted_name)),
+                "utf-8",
+            )
 
         metadata = self.magic_metadata.decrypt(key) if self.magic_metadata else {}
         pub_metadata = self.pub_magic_metadata.decrypt(key) if self.pub_magic_metadata else {}
