@@ -45,7 +45,7 @@ class EnteServer(DockerCompose):
         # set the keyring for test device key
         keyring.set_keyring(TestKeyring())
 
-        log.info("Starting ente test server with state %s", state)
+        log.info("Creating ente test server with state %s", state)
 
         super().__init__(context=TEST_COMPOSE_DIR, compose_file_name="compose.yaml")
 
@@ -70,6 +70,7 @@ class EnteServer(DockerCompose):
 
     def start(self) -> None:
         """DocString."""
+        log.info("Starting ente test server")
         super().start()
 
         self._wait_for_ping()
@@ -100,7 +101,7 @@ class EnteServer(DockerCompose):
     def get_object_url(self) -> str:
         """DocString."""
         host, port = self.get_service_host_and_port("minio", 3200)
-        log.info("object url host and port: %s %d", host, port)
+        log.info("object url http://%s:%d", host, port)
         return f"http://{host}:{port}"
 
 

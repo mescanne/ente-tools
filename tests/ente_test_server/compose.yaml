@@ -8,8 +8,6 @@ services:
         condition: service_healthy
       postgres-provision:
         condition: service_completed_successfully
-      #minio-provision:
-      #  condition: service_completed_successfully
     environment:
       # Pass-in the config to connect to the DB and MinIO
       ENTE_CREDENTIALS_FILE: /credentials.yaml
@@ -84,26 +82,17 @@ services:
       MINIO_ROOT_PASSWORD: testtest
     entrypoint: /bin/bash /minio-startup.sh
     volumes:
-      # TODO To be put into a volume
       - minio-data:/data
       - ./files/minio-startup.sh:/minio-startup.sh:ro
       - ./files/minio-checkpoint.sh:/minio-checkpoint.sh:ro
       - ./state/${STATE}:/state
     networks:
       - internal
-
-#  minio-provision:
-#    image: minio/mc
-#    depends_on:
-#      minio:
-#        condition: service_started
-#    volumes:
-#      - ./files/minio-provision.sh:/provision.sh:ro
-#      - ./init/data:/init
-#      - ./tmp/minio-data:/data
-#    networks:
-#      - internal
-#    entrypoint: /bin/bash /provision.sh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3200/minio/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres-data:
