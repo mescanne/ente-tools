@@ -59,7 +59,7 @@ class InMemoryBackend(Backend):
         """Get all local media from the backend."""
         return self._local_media
 
-    def local_refresh(self, sync_dir: str, *, force_refresh: bool = False, workers: int | None = None) -> None:
+    def local_refresh(self, sync_dir: str, *, force_refresh: bool = False, workers: int | None = None) -> None:  # noqa: ARG002
         """Refresh the local data by scanning the specified directory for media files."""
         # For the in-memory backend, a refresh is always a full refresh.
         # The `force_refresh` parameter is ignored but kept for compatibility.

@@ -87,20 +87,16 @@ class SQLiteBackend(Backend):
                     )
                     session.add(db_media)
                     processed_count += 1
-                else:
-                    # Existing file, check for modification
-                    if (
-                        existing_media_db.media["media"]["file"]["st_mtime_ns"]
-                        != media.media.file.st_mtime_ns
-                        or existing_media_db.media["media"]["file"]["size"] != media.media.file.size
-                    ):
-                        # Modified
-                        existing_media_db.media = media.model_dump()
-                        existing_media_db.xmp_sidecar = (
-                            media.xmp_sidecar.model_dump() if media.xmp_sidecar else None
-                        )
-                        session.add(existing_media_db)
-                        processed_count += 1
+                # Existing file, check for modification
+                elif (
+                    existing_media_db.media["media"]["file"]["st_mtime_ns"] != media.media.file.st_mtime_ns
+                    or existing_media_db.media["media"]["file"]["size"] != media.media.file.size
+                ):
+                    # Modified
+                    existing_media_db.media = media.model_dump()
+                    existing_media_db.xmp_sidecar = media.xmp_sidecar.model_dump() if media.xmp_sidecar else None
+                    session.add(existing_media_db)
+                    processed_count += 1
 
                 if processed_count > 0 and processed_count % 100 == 0:
                     session.commit()
@@ -118,5 +114,5 @@ class SQLiteBackend(Backend):
 
     def _clear_local_media(self) -> None:
         with Session(self.engine) as session:
-            session.exec(delete(MediaDB))
+            session.exec(delete(MediaDB))  # type: ignore[arg-type]
             session.commit()

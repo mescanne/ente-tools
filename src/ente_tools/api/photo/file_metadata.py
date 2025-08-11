@@ -49,7 +49,7 @@ class Media(BaseModel):
         self.xmp_sidecar = NewXMPDiskFile.from_file(sidecar)
 
 
-def scan_media(sync_dir: str, workers: int | None = None) -> Iterator[Media]:  # noqa: C901, PLR0912
+def scan_media(sync_dir: str, workers: int | None = None) -> Iterator[Media]:  # noqa: C901
     """DocString."""
     scan_files: dict[type[MediaTypes], list[tuple[NewLocalDiskFile, NewLocalDiskFile | None]]] = {}
 
