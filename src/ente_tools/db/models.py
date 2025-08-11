@@ -20,7 +20,6 @@ from sqlmodel import Field, SQLModel
 from ente_tools.api.core.types_collection import Collection
 from ente_tools.api.core.types_crypt import AuthorizationResponse, EnteEncKeys, SPRAttributes
 from ente_tools.api.core.types_file import File
-from ente_tools.api.photo.file_metadata import Media
 
 
 class EnteAccountDB(SQLModel, table=True):
@@ -39,6 +38,6 @@ class MediaDB(SQLModel, table=True):
     """Represents a media file in the database."""
 
     id: int | None = Field(default=None, primary_key=True)
-    media: Media = Field(sa_column=Column(JSON))
+    media: dict = Field(sa_column=Column(JSON))
     xmp_sidecar: dict | None = Field(default=None, sa_column=Column(JSON))
     fullpath: str = Field(unique=True)

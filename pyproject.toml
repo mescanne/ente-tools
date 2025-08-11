@@ -84,4 +84,5 @@ dev = [
     "testcontainers>=4.9.1",
     "pyright",
     "ruff>=0.9.6",
+    "pre-commit",
 ]

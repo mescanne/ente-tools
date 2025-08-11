@@ -15,10 +15,10 @@
 
 import logging
 
-from sqlmodel import Session, SQLModel, create_engine, select
+from sqlmodel import Session, SQLModel, create_engine, delete, select
 
 from ente_tools.api.core.account import EnteAccount
-from ente_tools.api.photo.file_metadata import Media, refresh
+from ente_tools.api.photo.file_metadata import Media, scan_media
 from ente_tools.db.base import Backend
 from ente_tools.db.models import EnteAccountDB, MediaDB
 
@@ -59,37 +59,74 @@ class SQLiteBackend(Backend):
     def get_local_media(self) -> list[Media]:
         """Get all local media from the backend."""
         with Session(self.engine) as session:
-            return [Media(**media.model_dump()) for media in session.exec(select(MediaDB)).all()]
+            # The `media` field in MediaDB is a dict representation of a Media object.
+            return [Media(**db_media.media) for db_media in session.exec(select(MediaDB)).all()]
 
     def local_refresh(self, sync_dir: str, *, force_refresh: bool = False, workers: int | None = None) -> None:
         """Refresh the local data by scanning the specified directory for media files."""
-        # For SQLite backend, we can't just pass the list of previous media objects
-        # because they are not in memory. We can retrieve them from the DB if needed.
-        # For now, we will follow a simple approach: we get the refreshed list of media
-        # and then update the database. A more optimized approach would be to check
-        # each file against the DB.
-
         if force_refresh:
             self._clear_local_media()
 
-        previous_media = self.get_local_media()
-        refreshed_media_list = refresh(sync_dir, previous_media, workers=workers)
-
         with Session(self.engine) as session:
-            # A simple way to handle this is to clear the table and insert the new data.
-            # This is not efficient for large datasets but is simple to implement.
-            self._clear_local_media()
-            for media in refreshed_media_list:
-                db_media = MediaDB(
-                    media=media,
-                    xmp_sidecar=media.xmp_sidecar.model_dump() if media.xmp_sidecar else None,
-                    fullpath=media.media.file.fullpath,
-                )
-                session.add(db_media)
-            session.commit()
+            all_disk_paths = set()
+            processed_count = 0
+
+            db_media_dict = {media.fullpath: media for media in session.exec(select(MediaDB)).all()}
+
+            for media in scan_media(sync_dir, workers=workers):
+                all_disk_paths.add(media.media.file.fullpath)
+
+                existing_media_db = db_media_dict.get(media.media.file.fullpath)
+
+                if existing_media_db is None:
+                    # New file
+                    db_media = MediaDB(
+                        media=media.model_dump(),
+                        xmp_sidecar=media.xmp_sidecar.model_dump() if media.xmp_sidecar else None,
+                        fullpath=media.media.file.fullpath,
+                    )
+                    session.add(db_media)
+                    processed_count += 1
+                else:
+                    existing_media_obj = Media(**existing_media_db.media)
+
+                    media_modified = (
+                        existing_media_obj.media.file.st_mtime_ns != media.media.file.st_mtime_ns
+                        or existing_media_obj.media.file.size != media.media.file.size
+                    )
+
+                    sidecar_modified = False
+                    old_sc = existing_media_obj.xmp_sidecar
+                    new_sc = media.xmp_sidecar
+                    if (old_sc is None) != (new_sc is None):
+                        sidecar_modified = True
+                    elif old_sc and new_sc:
+                        sidecar_modified = (
+                            old_sc.file.st_mtime_ns != new_sc.file.st_mtime_ns or old_sc.file.size != new_sc.file.size
+                        )
+
+                    if media_modified or sidecar_modified:
+                        # Modified
+                        existing_media_db.media = media.model_dump()
+                        existing_media_db.xmp_sidecar = media.xmp_sidecar.model_dump() if media.xmp_sidecar else None
+                        session.add(existing_media_db)
+                        processed_count += 1
+
+                if processed_count > 0 and processed_count % 100 == 0:
+                    session.commit()
+
+            session.commit()  # commit any remaining changes
+
+            # Handle deletions
+            db_paths = set(db_media_dict.keys())
+            deleted_paths = db_paths - all_disk_paths
+            if deleted_paths:
+                log.info("Deleting %d files from DB", len(deleted_paths))
+                statement = delete(MediaDB).where(MediaDB.fullpath.in_(deleted_paths))  # type: ignore[attr-defined]
+                session.exec(statement)  # type: ignore[arg-type]
+                session.commit()
 
     def _clear_local_media(self) -> None:
         with Session(self.engine) as session:
-            for media in session.exec(select(MediaDB)).all():
-                session.delete(media)
+            session.exec(delete(MediaDB))  # type: ignore[arg-type]
             session.commit()
