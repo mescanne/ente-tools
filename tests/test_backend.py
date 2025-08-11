@@ -14,6 +14,7 @@
 """Tests for the database backends."""
 
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -126,6 +127,46 @@ class TestSQLiteBackend(unittest.TestCase):
         assert str(img2_path) in paths
         assert str(img3_path) in paths
         assert str(img1_path) not in paths
+
+    def test_local_refresh_with_sidecar(self) -> None:
+        """Test the local_refresh method with sidecar files."""
+        img_path = Path(self.tmpdir.name) / "img.jpg"
+        Image.new("RGB", (100, 100), color="red").save(img_path)
+
+        # Initial refresh
+        self.backend.local_refresh(sync_dir=self.tmpdir.name)
+        media = self.backend.get_local_media()
+        assert len(media) == 1
+        assert media[0].xmp_sidecar is None
+
+        # Add a sidecar
+        xmp_path = Path(self.tmpdir.name) / "img.xmp"
+        xmp_path.write_text("<x:xmpmeta xmlns:x='adobe:ns:meta/'/>")
+
+        self.backend.local_refresh(sync_dir=self.tmpdir.name)
+        media = self.backend.get_local_media()
+        assert len(media) == 1
+        assert media[0].xmp_sidecar is not None
+        original_sidecar_mtime = media[0].xmp_sidecar.file.st_mtime_ns
+
+        # Modify only the sidecar
+        time.sleep(0.01)  # Ensure mtime is different
+        xmp_path.touch()
+
+        self.backend.local_refresh(sync_dir=self.tmpdir.name)
+        media = self.backend.get_local_media()
+        assert len(media) == 1
+        assert media[0].xmp_sidecar is not None
+        new_sidecar_mtime = media[0].xmp_sidecar.file.st_mtime_ns
+        assert new_sidecar_mtime > original_sidecar_mtime
+
+        # Delete the sidecar
+        xmp_path.unlink()
+
+        self.backend.local_refresh(sync_dir=self.tmpdir.name)
+        media = self.backend.get_local_media()
+        assert len(media) == 1
+        assert media[0].xmp_sidecar is None
 
 
 if __name__ == "__main__":
