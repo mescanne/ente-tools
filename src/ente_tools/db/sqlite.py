@@ -13,9 +13,8 @@
 # limitations under the License.
 """SQLite backend for the database."""
 import logging
-from typing import Optional
 
-from sqlmodel import create_engine, Session, SQLModel, select
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from ente_tools.api.core.account import EnteAccount
 from ente_tools.api.photo.file_metadata import Media, refresh
@@ -29,6 +28,7 @@ class SQLiteBackend(Backend):
     """SQLite backend for the database."""
 
     def __init__(self, db_path: str = "ente.db") -> None:
+        """Initialise the SQLite backend."""
         self.engine = create_engine(f"sqlite:///{db_path}")
         SQLModel.metadata.create_all(self.engine)
 
@@ -51,7 +51,9 @@ class SQLiteBackend(Backend):
     def remove_account(self, email: str) -> None:
         """Remove an account from the backend by email."""
         with Session(self.engine) as session:
-            account = session.query(EnteAccountDB).filter(EnteAccountDB.email == email).first()
+            account = session.exec(
+                select(EnteAccountDB).where(EnteAccountDB.email == email),
+            ).first()
             if account:
                 session.delete(account)
                 session.commit()
@@ -59,7 +61,7 @@ class SQLiteBackend(Backend):
     def get_local_media(self) -> list[Media]:
         """Get all local media from the backend."""
         with Session(self.engine) as session:
-            return [Media(**media.model_dump()) for media in session.query(MediaDB).all()]
+            return [Media(**media.model_dump()) for media in session.exec(select(MediaDB)).all()]
 
     def local_refresh(self, sync_dir: str, *, force_refresh: bool = False, workers: int | None = None) -> None:
         """Refresh the local data by scanning the specified directory for media files."""
@@ -81,7 +83,7 @@ class SQLiteBackend(Backend):
             self._clear_local_media()
             for media in refreshed_media_list:
                 db_media = MediaDB(
-                    media=media.media,
+                    media=media,
                     xmp_sidecar=media.xmp_sidecar.model_dump() if media.xmp_sidecar else None,
                     fullpath=media.media.file.fullpath,
                 )
@@ -90,5 +92,6 @@ class SQLiteBackend(Backend):
 
     def _clear_local_media(self) -> None:
         with Session(self.engine) as session:
-            session.query(MediaDB).delete()
+            for media in session.exec(select(MediaDB)).all():
+                session.delete(media)
             session.commit()

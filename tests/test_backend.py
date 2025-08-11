@@ -20,8 +20,8 @@ from ente_tools.api.core.types_crypt import (
     AuthorizationResponse,
     EnteEncKeys,
     KeyAttributes,
-    SPRAttributes,
     SecretPair,
+    SPRAttributes,
 )
 from ente_tools.db.sqlite import SQLiteBackend
 
@@ -81,8 +81,8 @@ class TestSQLiteBackend(unittest.TestCase):
         )
         self.backend.add_account(account)
         accounts = self.backend.get_accounts()
-        self.assertEqual(len(accounts), 1)
-        self.assertEqual(accounts[0].email, "test@example.com")
+        assert len(accounts) == 1
+        assert accounts[0].email == "test@example.com"
 
 
 if __name__ == "__main__":

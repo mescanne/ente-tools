@@ -14,8 +14,9 @@
 """DocString."""
 
 import logging
+from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from platformdirs import user_cache_dir, user_config_dir
@@ -23,12 +24,13 @@ from rich.logging import RichHandler
 from typer_config.callbacks import toml_conf_callback
 
 from ente_tools.api.core.api import EnteAPIError
-from enum import Enum
-
 from ente_tools.api.photo.sync import EnteClient
-from ente_tools.db.base import Backend
 from ente_tools.db.in_memory import InMemoryBackend
 from ente_tools.db.sqlite import SQLiteBackend
+
+if TYPE_CHECKING:
+    from ente_tools.db.base import Backend
+
 
 APP_NAME = "ente_tool2"
 
@@ -45,6 +47,8 @@ logging.basicConfig(
 
 
 class BackendChoice(str, Enum):
+    """Enum for the available backends."""
+
     IN_MEMORY = "in-memory"
     SQLITE = "sqlite"
 
@@ -179,11 +183,11 @@ def app_main(  # noqa: PLR0913
         log.error("Sync directory %s does not exist.", sync_dir)
         raise typer.Exit(1)
 
-    backend_instance: Backend
-    if backend == BackendChoice.SQLITE:
-        backend_instance = SQLiteBackend(db_path=str(database))
-    else:
-        backend_instance = InMemoryBackend()
+    backend_instance: Backend = (
+        SQLiteBackend(db_path=str(database))
+        if backend == BackendChoice.SQLITE
+        else InMemoryBackend()
+    )
 
     ctxt.obj["backend"] = backend_instance
     ctxt.obj["max_vers"] = max_vers

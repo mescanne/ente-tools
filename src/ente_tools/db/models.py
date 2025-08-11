@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """SQLModel definitions for the database."""
-from typing import Optional
 
 from sqlalchemy import Column
 from sqlalchemy.types import JSON
@@ -27,7 +26,7 @@ from ente_tools.api.photo.file_metadata import Media
 class EnteAccountDB(SQLModel, table=True):
     """Represents an authenticated Ente account in the database."""
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     email: str = Field(unique=True)
     attributes: SPRAttributes = Field(sa_column=Column(JSON))
     auth_response: AuthorizationResponse = Field(sa_column=Column(JSON))
@@ -39,7 +38,7 @@ class EnteAccountDB(SQLModel, table=True):
 class MediaDB(SQLModel, table=True):
     """Represents a media file in the database."""
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     media: Media = Field(sa_column=Column(JSON))
-    xmp_sidecar: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    xmp_sidecar: dict | None = Field(default=None, sa_column=Column(JSON))
     fullpath: str = Field(unique=True)

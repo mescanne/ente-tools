@@ -25,6 +25,7 @@ class InMemoryBackend(Backend):
     """In-memory backend for the database."""
 
     def __init__(self) -> None:
+        """Initialise the in-memory backend."""
         self._accounts: list[EnteAccount] = []
         self._local_media: list[Media] = []
 
