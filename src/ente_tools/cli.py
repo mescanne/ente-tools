@@ -23,8 +23,12 @@ from rich.logging import RichHandler
 from typer_config.callbacks import toml_conf_callback
 
 from ente_tools.api.core.api import EnteAPIError
-from ente_tools.api.photo.sync import EnteClient, EnteData
-from ente_tools.filestat import load
+from enum import Enum
+
+from ente_tools.api.photo.sync import EnteClient
+from ente_tools.db.base import Backend
+from ente_tools.db.in_memory import InMemoryBackend
+from ente_tools.db.sqlite import SQLiteBackend
 
 APP_NAME = "ente_tool2"
 
@@ -38,6 +42,11 @@ logging.basicConfig(
     datefmt="[%X]",
     handlers=[RichHandler()],
 )
+
+
+class BackendChoice(str, Enum):
+    IN_MEMORY = "in-memory"
+    SQLITE = "sqlite"
 
 
 def get_toml_config(app_name: str) -> str:
@@ -66,10 +75,10 @@ def load_toml_config(ctxt: typer.Context, param: typer.CallbackParam, config: st
     return toml_conf_callback(ctxt, param, config)
 
 
-def get_client(ctxt: typer.Context, data: EnteData) -> EnteClient:
+def get_client(ctxt: typer.Context) -> EnteClient:
     """Create EnteClient using the command line arguments."""
     return EnteClient(
-        data,
+        ctxt.obj["backend"],
         api_url=ctxt.obj["api_url"],
         api_account_url=ctxt.obj["api_account_url"],
         api_download_url=ctxt.obj["api_download_url"],
@@ -83,17 +92,15 @@ def link(
     unlink: Annotated[bool, typer.Option()] = False,  # noqa: FBT002
 ) -> None:
     """Link or unlink email with local database."""
-    with load(ctxt.obj["database"], EnteData, max_vers=ctxt.obj["max_vers"]) as data:
-        client = get_client(ctxt, data)
-        client.link(email, unlink=unlink)
+    client = get_client(ctxt)
+    client.link(email, unlink=unlink)
 
 
 @app.command()
 def info(ctxt: typer.Context) -> None:
     """Fetch general information about the database."""
-    with load(ctxt.obj["database"], EnteData, skip_save=True, max_vers=ctxt.obj["max_vers"]) as data:
-        client = get_client(ctxt, data)
-        client.info()
+    client = get_client(ctxt)
+    client.info()
 
 
 @app.command()
@@ -104,25 +111,21 @@ def refresh(
     workers: Annotated[int | None, typer.Option()] = None,
 ) -> None:
     """Refresh both remote and local data."""
-    with load(ctxt.obj["database"], EnteData, max_vers=ctxt.obj["max_vers"]) as data:
-        client = get_client(ctxt, data)
-        client.remote_refresh(email=email, force_refresh=force_refresh)
-
-    with load(ctxt.obj["database"], EnteData, max_vers=ctxt.obj["max_vers"]) as data:
-        client = get_client(ctxt, data)
-        client.local_refresh(ctxt.obj["sync_dir"], force_refresh=force_refresh, workers=workers)
+    client = get_client(ctxt)
+    client.remote_refresh(email=email, force_refresh=force_refresh)
+    client.local_refresh(ctxt.obj["sync_dir"], force_refresh=force_refresh, workers=workers)
 
 
 @app.command()
 def export(ctxt: typer.Context) -> None:
     """Export local data."""
-    with load(ctxt.obj["database"], EnteData, skip_save=True) as data:
-        log.info("Exporting")
-        for m in data.local:
-            log.info(m.media.file.fullpath)
-            log.info(m.media.hash)
-            log.info(m.media.data_hash)
-            log.info(m.media.media_type)
+    client = get_client(ctxt)
+    log.info("Exporting")
+    for m in client.backend.get_local_media():
+        log.info(m.media.file.fullpath)
+        log.info(m.media.hash)
+        log.info(m.media.data_hash)
+        log.info(m.media.media_type)
 
 
 @app.command()
@@ -135,28 +138,27 @@ def upload(ctxt: typer.Context, file: str) -> None:
 @app.command()
 def download_missing(ctxt: typer.Context) -> None:
     """Download any files that are not local."""
-    with load(ctxt.obj["database"], EnteData, max_vers=ctxt.obj["max_vers"]) as data:
-        client = get_client(ctxt, data)
-        client.download_missing()
+    client = get_client(ctxt)
+    client.download_missing()
 
 
 @app.command()
 def download(ctxt: typer.Context, file: str) -> None:
     """Download a remote file."""
-    with load(ctxt.obj["database"], EnteData, max_vers=ctxt.obj["max_vers"]) as data:
-        client = get_client(ctxt, data)
-        client.download(file)
+    client = get_client(ctxt)
+    client.download(file)
 
 
 @app.callback()
 def app_main(  # noqa: PLR0913
     ctxt: typer.Context,
     sync_dir: Annotated[Path, typer.Option(help="Local synchronization directory")] = Path.home(),  # noqa: B008
+    backend: Annotated[BackendChoice, typer.Option(help="Database backend to use")] = BackendChoice.IN_MEMORY,
     max_vers: Annotated[int, typer.Option(help="Maximum backup versions of database (0 = disable)")] = 10,
     api_url: Annotated[str, typer.Option(help="API URL for Ente")] = EnteClient.EnteApiUrl,
     api_account_url: Annotated[str, typer.Option(help="API Account URL for Ente")] = EnteClient.EnteAccountUrl,
     api_download_url: Annotated[str, typer.Option(help="Download API URL")] = EnteClient.EnteDownloadUrl,
-    database: Annotated[Path, typer.Option(help="Database file")] = Path(user_cache_dir()) / f"{APP_NAME}.json.gz",  # noqa: B008
+    database: Annotated[Path, typer.Option(help="Database file")] = Path(user_cache_dir()) / f"{APP_NAME}.db",  # noqa: B008
     debug: Annotated[bool, typer.Option(help="Enable debug logging")] = False,  # noqa: FBT002
     config: Annotated[  # noqa: ARG001
         str,
@@ -177,6 +179,13 @@ def app_main(  # noqa: PLR0913
         log.error("Sync directory %s does not exist.", sync_dir)
         raise typer.Exit(1)
 
+    backend_instance: Backend
+    if backend == BackendChoice.SQLITE:
+        backend_instance = SQLiteBackend(db_path=str(database))
+    else:
+        backend_instance = InMemoryBackend()
+
+    ctxt.obj["backend"] = backend_instance
     ctxt.obj["max_vers"] = max_vers
     ctxt.obj["sync_dir"] = sync_dir
     ctxt.obj["database"] = database

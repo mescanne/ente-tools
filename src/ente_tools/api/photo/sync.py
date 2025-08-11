@@ -21,26 +21,18 @@ from typing import TYPE_CHECKING
 
 import humanize
 from jinja2 import Environment
-from pydantic import BaseModel
-
 from ente_tools.api.core import EnteAPI
 from ente_tools.api.core.account import EnteAccount
 from ente_tools.api.core.api import EnteAPIError
-from ente_tools.api.photo.file_metadata import Media, refresh
+from ente_tools.api.photo.file_metadata import Media
 from ente_tools.api.photo.photo_file import RemotePhotoFile
+from ente_tools.db.base import Backend
 
 if TYPE_CHECKING:
     from ente_tools.api.core.types_crypt import EnteKeys
     from ente_tools.api.core.types_file import File
 
 log = logging.getLogger("sync")
-
-
-class EnteData(BaseModel):
-    """Data managed by the Ente client, including accounts and local files."""
-
-    accounts: list[EnteAccount] = []
-    local: list[Media] = []
 
 
 class EnteClient:
@@ -52,13 +44,13 @@ class EnteClient:
 
     def __init__(
         self,
-        data: EnteData,
+        backend: Backend,
         api_url: str = EnteApiUrl,
         api_account_url: str = EnteAccountUrl,
         api_download_url: str = EnteDownloadUrl,
     ) -> None:
-        """Initialize the EnteClient with the given data and API URLs."""
-        self.data = data
+        """Initialize the EnteClient with the given backend and API URLs."""
+        self.backend = backend
         self.api = EnteAPI(
             pkg="io.ente.photos",
             api_url=api_url,
@@ -66,13 +58,10 @@ class EnteClient:
             api_download_url=api_download_url,
         )
 
-    def get_data(self) -> EnteData:
-        """Return the EnteData object managed by this client."""
-        return self.data
-
     def info(self) -> None:
         """Display information about the linked accounts and the status of local and remote files."""
-        for acc in self.data.accounts:
+        accounts = self.backend.get_accounts()
+        for acc in accounts:
             log.info("Account %s has collections %d, files %d", acc.email, len(acc.collections), len(acc.files))
 
         def calc_files(desc: str, files: list[Media], t: Callable[[Media], bool]) -> str:
@@ -97,39 +86,43 @@ class EnteClient:
             )
             log.info("%s %s", desc, s)
 
-        show_files("All", self.data.local)
+        local_media = self.backend.get_local_media()
+        show_files("All", local_media)
 
         rfiles = {
-            f.metadata.get("hash", ""): f for acc in self.data.accounts for c, files in acc.files.items() for f in files
+            f.metadata.get("hash", ""): f
+            for acc in accounts
+            for c, files in acc.files.items()
+            for f in files
         }
 
-        show_files("Sync'd:", [f for f in self.data.local if f.media.hash in rfiles])
-        show_files("Needs to be uploaded:", [f for f in self.data.local if f.media.hash not in rfiles])
+        show_files("Sync'd:", [f for f in local_media if f.media.hash in rfiles])
+        show_files("Needs to be uploaded:", [f for f in local_media if f.media.hash not in rfiles])
 
-        lfiles = {f.media.hash: f for f in self.data.local}
+        lfiles = {f.media.hash: f for f in local_media}
 
         show_files(
             "Duplicated:",
             [
                 f
-                for f in self.data.local
+                for f in local_media
                 if f.media.hash in lfiles and f.media.file.fullpath != lfiles[f.media.hash].media.file.fullpath
             ],
         )
 
-        lfiles = {f.media.data_hash: f for f in self.data.local}
+        lfiles = {f.media.data_hash: f for f in local_media}
 
         show_files(
             "Data Duplicated:",
             [
                 f
-                for f in self.data.local
+                for f in local_media
                 if f.media.data_hash in lfiles
                 and f.media.file.fullpath != lfiles[f.media.data_hash].media.file.fullpath
             ],
         )
 
-        for acc in self.data.accounts:
+        for acc in accounts:
             to_download = [
                 f for c, files in acc.files.items() for f in files if f.metadata.get("hash", "") not in lfiles
             ]
@@ -143,23 +136,24 @@ class EnteClient:
 
     def link(self, email: str, *, unlink: bool = False) -> None:
         """Link or unlink an Ente account with the given email address."""
-        emails = {acc.email for acc in self.data.accounts}
+        emails = {acc.email for acc in self.backend.get_accounts()}
 
         if unlink:
             if email not in emails:
                 msg = f"Email {email} is is not linked"
                 raise EnteAPIError(msg)
-            self.data.accounts = [acc for acc in self.data.accounts if acc.email != email]
+            self.backend.remove_account(email)
         else:
             if email in emails:
                 msg = f"Email {email} is already linked"
                 raise EnteAPIError(msg)
-            self.data.accounts.append(EnteAccount.authenticate(self.api, email))
+            account = EnteAccount.authenticate(self.api, email)
+            self.backend.add_account(account)
             self.remote_refresh(email=email)
 
     def remote_refresh(self, *, email: str | None = None, force_refresh: bool = False) -> None:
         """Refresh the remote data for the specified account(s) from the Ente API."""
-        for acc in self.data.accounts:
+        for acc in self.backend.get_accounts():
             if email and acc.email != email:
                 continue
             log.info("Refreshing account %s", acc.email)
@@ -170,19 +164,19 @@ class EnteClient:
                 len(acc.collections),
                 len(acc.files),
             )
+            # After refreshing, we need to update the account in the backend
+            # This is tricky because we don't have a direct way to update an account.
+            # A simple way is to remove and re-add it.
+            self.backend.remove_account(acc.email)
+            self.backend.add_account(acc)
+
 
     def local_export(self) -> None:
         """Export the local files."""
 
     def local_refresh(self, sync_dir: str, *, force_refresh: bool = False, workers: int | None = None) -> None:
         """Refresh the local data by scanning the specified directory for media files."""
-        previous = self.data.local
-        if force_refresh:
-            previous = None
-
-        log.info("Refreshing dir %s", sync_dir)
-        self.data.local = refresh(sync_dir, previous, workers=workers)
-        log.info("Refreshed dir %s", sync_dir)
+        self.backend.local_refresh(sync_dir, force_refresh=force_refresh, workers=workers)
 
     # TODO(scannell): Jinja template needs a way to deal with duplicates, e.g., making it unique
     def download_missing(self, jinja_template: str = "{{file.get_filename()}}") -> None:
@@ -203,11 +197,11 @@ class EnteClient:
         # download them in parallel by some configuration to the local filename
 
         # Find local hashes
-        local_hashes = {f.media.hash for f in self.data.local}
+        local_hashes = {f.media.hash for f in self.backend.get_local_media()}
 
         # Find remote groups of files by hash that aren't already local
         file_groups: dict[str, list[File]] = defaultdict(list)
-        for acc in self.data.accounts:
+        for acc in self.backend.get_accounts():
             for files in acc.files.values():
                 for f in files:
                     if not f.metadata or "hash" not in f.metadata:
@@ -242,7 +236,7 @@ class EnteClient:
         """
         found_files: list[File] = []
         keys: EnteKeys | None = None
-        for acc in self.data.accounts:
+        for acc in self.backend.get_accounts():
             for files in acc.files.values():
                 for f in files:
                     if not f.metadata:

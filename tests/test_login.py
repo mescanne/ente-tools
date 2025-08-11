@@ -19,7 +19,7 @@ from collections.abc import Generator
 
 import pytest
 
-from ente_tools.api.photo.sync import EnteData
+from ente_tools.db.in_memory import InMemoryBackend
 
 from .ente_test_server.ente_server import TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, EnteServer
 
@@ -37,7 +37,7 @@ def ente_server() -> Generator[EnteServer]:
 
 def test_login(monkeypatch: pytest.MonkeyPatch, ente_server: EnteServer) -> None:
     """DocString."""
-    ente_client = ente_server.get_client(data=EnteData())
+    ente_client = ente_server.get_client(backend=InMemoryBackend())
 
     # Get the OTP from the server logs
     monkeypatch.setattr("builtins.input", lambda _: ente_server.get_otp())
