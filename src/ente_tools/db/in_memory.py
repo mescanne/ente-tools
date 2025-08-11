@@ -29,7 +29,7 @@
 import logging
 
 from ente_tools.api.core.account import EnteAccount
-from ente_tools.api.photo.file_metadata import Media, refresh
+from ente_tools.api.photo.file_metadata import Media, scan_media
 from ente_tools.db.base import Backend
 
 log = logging.getLogger(__name__)
@@ -61,10 +61,9 @@ class InMemoryBackend(Backend):
 
     def local_refresh(self, sync_dir: str, *, force_refresh: bool = False, workers: int | None = None) -> None:
         """Refresh the local data by scanning the specified directory for media files."""
-        previous = self._local_media
-        if force_refresh:
-            previous = None
+        # For the in-memory backend, a refresh is always a full refresh.
+        # The `force_refresh` parameter is ignored but kept for compatibility.
         log.info("Refreshing dir %s", sync_dir)
         self.get_local_media().clear()
-        self.get_local_media().extend(refresh(sync_dir, previous, workers=workers))
+        self.get_local_media().extend(list(scan_media(sync_dir, workers=workers)))
         log.info("Refreshed dir %s", sync_dir)

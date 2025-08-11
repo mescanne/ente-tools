@@ -14,6 +14,7 @@
 """DocString."""
 
 import logging
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from mimetypes import guess_type
 from pathlib import Path
@@ -48,16 +49,8 @@ class Media(BaseModel):
         self.xmp_sidecar = NewXMPDiskFile.from_file(sidecar)
 
 
-def refresh(sync_dir: str, previous: list[Media] | None = None, workers: int | None = None) -> list[Media]:  # noqa: C901, PLR0912
+def scan_media(sync_dir: str, workers: int | None = None) -> Iterator[Media]:  # noqa: C901, PLR0912
     """DocString."""
-    # Index previous files
-    existing_files: dict[str, Media] = {}
-    if previous:
-        existing_files = {f.media.file.fullpath: f for f in previous}
-        log.info("Reusing existing %d files", len(existing_files))
-
-    good: list[Media] = []
-    redo_sidecars: list[tuple[Media, NewLocalDiskFile]] = []
     scan_files: dict[type[MediaTypes], list[tuple[NewLocalDiskFile, NewLocalDiskFile | None]]] = {}
 
     log.info("Scanning files %s", sync_dir)
@@ -99,40 +92,14 @@ def refresh(sync_dir: str, previous: list[Media] | None = None, workers: int | N
             xmp_sidecars.sort(key=lambda f: f.st_mtime_ns)
             xmp_sidecar = xmp_sidecars[-1] if len(xmp_sidecars) > 0 else None
 
-            # Find the previous media file that matches
-            if (
-                media_file.fullpath in existing_files
-                and existing_files[media_file.fullpath].media.file.st_mtime_ns == media_file.st_mtime_ns
-                and existing_files[media_file.fullpath].media.file.size == media_file.size
-            ):
-                media = existing_files[media_file.fullpath]
-
-                # If no xmp_sidecar, it's good to go
-                if not xmp_sidecar:
-                    media.xmp_sidecar = None
-                    good.append(media)
-
-                # Check if the files are the same..
-                elif media.is_xmp_sidecar_uptodate(xmp_sidecar):
-                    good.append(media)
-
-                else:
-                    redo_sidecars.append((media, xmp_sidecar))
-
-                continue
-
             # Mark file as needed to re-scan image or video
             if media_type not in scan_files:
                 scan_files[media_type] = []
 
             scan_files[media_type].append((media_file, xmp_sidecar))
 
-    if good:
-        log.info("Found %d unchanged files", len(good))
     for subtype, tasks in scan_files.items():
         log.info("Found new %d %s files", len(tasks), subtype.__name__)
-    if redo_sidecars:
-        log.info("Found %d updated metadata", len(redo_sidecars))
 
     # Process each type
     for subtype, tasks in scan_files.items():
@@ -149,7 +116,7 @@ def refresh(sync_dir: str, previous: list[Media] | None = None, workers: int | N
             )
 
         with ThreadPoolExecutor(max_workers=workers) as e:
-            good.extend(
+            yield from (
                 r
                 for r in track(
                     e.map(run_task, tasks),
@@ -158,10 +125,3 @@ def refresh(sync_dir: str, previous: list[Media] | None = None, workers: int | N
                 )
                 if r
             )
-
-    # Rescan XMP
-    for existing_file, sidecars in redo_sidecars:
-        existing_file.load_xmp_sidecars(sidecars)
-        good.append(existing_file)
-
-    return good
