@@ -79,51 +79,71 @@ def load_toml_config(ctxt: typer.Context, param: typer.CallbackParam, config: st
     return toml_conf_callback(ctxt, param, config)
 
 
-def get_client(ctxt: typer.Context) -> EnteClient:
+def get_backend(
+    backend: Annotated[
+        BackendChoice, typer.Option(help="Database backend to use")
+    ] = BackendChoice.IN_MEMORY,
+    database: Annotated[Path | None, typer.Option(help="Database file")] = None,
+) -> "Backend":
+    """Get the backend instance."""
+    if backend == BackendChoice.SQLITE:
+        if database is None:
+            database = Path(user_cache_dir()) / f"{APP_NAME}.db"
+        return SQLiteBackend(db_path=str(database))
+    return InMemoryBackend()
+
+
+def get_client(
+    backend: Annotated["Backend", typer.Depends(get_backend)],
+    api_url: Annotated[str, typer.Option(help="API URL for Ente")] = EnteClient.EnteApiUrl,
+    api_account_url: Annotated[
+        str, typer.Option(help="API Account URL for Ente")
+    ] = EnteClient.EnteAccountUrl,
+    api_download_url: Annotated[
+        str, typer.Option(help="Download API URL")
+    ] = EnteClient.EnteDownloadUrl,
+) -> EnteClient:
     """Create EnteClient using the command line arguments."""
     return EnteClient(
-        ctxt.obj["backend"],
-        api_url=ctxt.obj["api_url"],
-        api_account_url=ctxt.obj["api_account_url"],
-        api_download_url=ctxt.obj["api_download_url"],
+        backend,
+        api_url=api_url,
+        api_account_url=api_account_url,
+        api_download_url=api_download_url,
     )
 
 
 @app.command()
 def link(
-    ctxt: typer.Context,
+    client: Annotated[EnteClient, typer.Depends(get_client)],
     email: str,
-    unlink: Annotated[bool, typer.Option()] = False,  # noqa: FBT002
+    unlink: Annotated[bool, typer.Option(show_default=False)] = False,
 ) -> None:
     """Link or unlink email with local database."""
-    client = get_client(ctxt)
     client.link(email, unlink=unlink)
 
 
 @app.command()
-def info(ctxt: typer.Context) -> None:
+def info(client: Annotated[EnteClient, typer.Depends(get_client)]) -> None:
     """Fetch general information about the database."""
-    client = get_client(ctxt)
     client.info()
 
 
 @app.command()
 def refresh(
     ctxt: typer.Context,
-    force_refresh: Annotated[bool, typer.Option()] = False,  # noqa: FBT002
+    client: Annotated[EnteClient, typer.Depends(get_client)],
+    force_refresh: Annotated[bool, typer.Option(show_default=False)] = False,
     email: Annotated[str | None, typer.Option()] = None,
     workers: Annotated[int | None, typer.Option()] = None,
 ) -> None:
     """Refresh both remote and local data."""
-    client = get_client(ctxt)
     client.remote_refresh(email=email, force_refresh=force_refresh)
     client.local_refresh(ctxt.obj["sync_dir"], force_refresh=force_refresh, workers=workers)
 
 
 @app.command()
-def export(ctxt: typer.Context) -> None:
+def export(client: Annotated[EnteClient, typer.Depends(get_client)]) -> None:
     """Export local data."""
-    client = get_client(ctxt)
     log.info("Exporting")
     for m in client.backend.get_local_media():
         log.info(m.media.file.fullpath)
@@ -133,67 +153,70 @@ def export(ctxt: typer.Context) -> None:
 
 
 @app.command()
-def upload(ctxt: typer.Context, file: str) -> None:
+def upload(
+    client: Annotated[EnteClient, typer.Depends(get_client)],
+    ctxt: typer.Context,
+    file: str,
+) -> None:
     """Upload local file."""
-    log.info("sync_dir: %s database: %s", ctxt.obj["sync_dir"], ctxt.obj["database"])
+    db_path = None
+    if isinstance(client.backend, SQLiteBackend):
+        db_path = client.backend.db_path
+    log.info("sync_dir: %s database: %s", ctxt.obj["sync_dir"], db_path)
     log.info("Uploading file %s", file)
 
 
 @app.command()
-def download_missing(ctxt: typer.Context) -> None:
+def download_missing(client: Annotated[EnteClient, typer.Depends(get_client)]) -> None:
     """Download any files that are not local."""
-    client = get_client(ctxt)
     client.download_missing()
 
 
 @app.command()
-def download(ctxt: typer.Context, file: str) -> None:
+def download(client: Annotated[EnteClient, typer.Depends(get_client)], file: str) -> None:
     """Download a remote file."""
-    client = get_client(ctxt)
     client.download(file)
 
 
 @app.callback()
-def app_main(  # noqa: PLR0913
+def app_main(
     ctxt: typer.Context,
-    sync_dir: Annotated[Path, typer.Option(help="Local synchronization directory")] = Path.home(),  # noqa: B008
-    backend: Annotated[BackendChoice, typer.Option(help="Database backend to use")] = BackendChoice.IN_MEMORY,
-    max_vers: Annotated[int, typer.Option(help="Maximum backup versions of database (0 = disable)")] = 10,
-    api_url: Annotated[str, typer.Option(help="API URL for Ente")] = EnteClient.EnteApiUrl,
-    api_account_url: Annotated[str, typer.Option(help="API Account URL for Ente")] = EnteClient.EnteAccountUrl,
-    api_download_url: Annotated[str, typer.Option(help="Download API URL")] = EnteClient.EnteDownloadUrl,
-    database: Annotated[Path, typer.Option(help="Database file")] = Path(user_cache_dir()) / f"{APP_NAME}.db",  # noqa: B008
-    debug: Annotated[bool, typer.Option(help="Enable debug logging")] = False,  # noqa: FBT002
+    sync_dir: Annotated[
+        Path | None, typer.Option(help="Local synchronization directory")
+    ] = None,
+    max_vers: Annotated[
+        int, typer.Option(help="Maximum backup versions of database (0 = disable)")
+    ] = 10,
+    debug: Annotated[bool, typer.Option(show_default=False)] = False,
     config: Annotated[  # noqa: ARG001
-        str,
+        str | None,
         typer.Option(
             callback=load_toml_config,
             is_eager=True,
             help="TOML configuration file to load",
         ),
-    ] = get_toml_config(APP_NAME),
+    ] = None,
 ) -> None:
     """Ente tool utility for synchronizing local files with Ente."""
+    if config is None:
+        config = get_toml_config(APP_NAME)
+
     if debug:
         logging.getLogger().setLevel("DEBUG")
 
     ctxt.ensure_object(dict)
 
+    if sync_dir is None:
+        sync_dir = Path.home()
+
     if not sync_dir.exists():
         log.error("Sync directory %s does not exist.", sync_dir)
         raise typer.Exit(1)
 
-    backend_instance: Backend = (
-        SQLiteBackend(db_path=str(database)) if backend == BackendChoice.SQLITE else InMemoryBackend()
-    )
-
-    ctxt.obj["backend"] = backend_instance
-    ctxt.obj["max_vers"] = max_vers
+    # The context is used by commands that need access to app-level state
+    # that is not suitable for a dependency.
     ctxt.obj["sync_dir"] = sync_dir
-    ctxt.obj["database"] = database
-    ctxt.obj["api_url"] = api_url
-    ctxt.obj["api_account_url"] = api_account_url
-    ctxt.obj["api_download_url"] = api_download_url
+    ctxt.obj["max_vers"] = max_vers
 
 
 def main() -> None:
