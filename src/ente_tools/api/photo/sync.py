@@ -90,12 +90,7 @@ class EnteClient:
         local_media = self.backend.get_local_media()
         show_files("All", local_media)
 
-        rfiles = {
-            f.metadata.get("hash", ""): f
-            for acc in accounts
-            for c, files in acc.files.items()
-            for f in files
-        }
+        rfiles = {f.metadata.get("hash", ""): f for acc in accounts for c, files in acc.files.items() for f in files}
 
         show_files("Sync'd:", [f for f in local_media if f.media.hash in rfiles])
         show_files("Needs to be uploaded:", [f for f in local_media if f.media.hash not in rfiles])
@@ -170,7 +165,6 @@ class EnteClient:
             # A simple way is to remove and re-add it.
             self.backend.remove_account(acc.email)
             self.backend.add_account(acc)
-
 
     def local_export(self) -> None:
         """Export the local files."""

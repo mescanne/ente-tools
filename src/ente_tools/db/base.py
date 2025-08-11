@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Base class for database backends."""
+
 from abc import ABC, abstractmethod
 
 from ente_tools.api.core.account import EnteAccount

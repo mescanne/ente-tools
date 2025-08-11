@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """SQLite backend for the database."""
+
 import logging
 
 from sqlmodel import Session, SQLModel, create_engine, select
@@ -35,10 +36,7 @@ class SQLiteBackend(Backend):
     def get_accounts(self) -> list[EnteAccount]:
         """Get all accounts from the backend."""
         with Session(self.engine) as session:
-            return [
-                EnteAccount(**acc.model_dump(by_alias=True))
-                for acc in session.exec(select(EnteAccountDB)).all()
-            ]
+            return [EnteAccount(**acc.model_dump(by_alias=True)) for acc in session.exec(select(EnteAccountDB)).all()]
 
     def add_account(self, account: EnteAccount) -> None:
         """Add an account to the backend."""

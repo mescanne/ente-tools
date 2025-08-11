@@ -184,9 +184,7 @@ def app_main(  # noqa: PLR0913
         raise typer.Exit(1)
 
     backend_instance: Backend = (
-        SQLiteBackend(db_path=str(database))
-        if backend == BackendChoice.SQLITE
-        else InMemoryBackend()
+        SQLiteBackend(db_path=str(database)) if backend == BackendChoice.SQLITE else InMemoryBackend()
     )
 
     ctxt.obj["backend"] = backend_instance
