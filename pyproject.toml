@@ -68,6 +68,8 @@ lint.ignore = [
     # "ERA001",
     # Ignore trailing whitespace
     # "W291",
+    # Allow assert
+    "S101",
 ]
 lint.fixable = ["ALL"]
 

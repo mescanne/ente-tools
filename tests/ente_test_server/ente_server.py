@@ -25,7 +25,8 @@ import keyring.backend
 import pytest
 from testcontainers.compose import DockerCompose
 
-from ente_tools.api.photo.sync import EnteClient, EnteData
+from ente_tools.api.photo.sync import EnteClient
+from ente_tools.db.base import Backend
 
 log = logging.getLogger(__name__)
 
@@ -75,10 +76,10 @@ class EnteServer(DockerCompose):
 
         self._wait_for_ping()
 
-    def get_client(self, data: EnteData) -> EnteClient:
+    def get_client(self, backend: Backend) -> EnteClient:
         """DocString."""
         return EnteClient(
-            data=data,
+            backend=backend,
             api_url=self.get_api_url(),
             api_account_url=self.get_api_url(),
             api_download_url=self.get_api_url() + "/files/download/",

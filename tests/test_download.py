@@ -19,7 +19,8 @@ from collections.abc import Generator
 
 import pytest
 
-from ente_tools.api.photo.sync import EnteClient, EnteData
+from ente_tools.api.photo.sync import EnteClient
+from ente_tools.db.in_memory import InMemoryBackend
 
 from .ente_test_server.ente_server import TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, EnteServer
 
@@ -38,7 +39,7 @@ def ente_server_download() -> Generator[EnteServer]:
 @pytest.fixture
 def ente_client(monkeypatch: pytest.MonkeyPatch, ente_server_download: EnteServer) -> EnteClient:
     """DocString."""
-    ente_client = ente_server_download.get_client(data=EnteData())
+    ente_client = ente_server_download.get_client(backend=InMemoryBackend())
 
     # Get the OTP from the server logs
     monkeypatch.setattr("builtins.input", lambda _: ente_server_download.get_otp())
@@ -57,7 +58,7 @@ def test_download(ente_client: EnteClient) -> None:
     # refresh cache
     ente_client.remote_refresh()
 
-    log.info(ente_client.data)
+    log.info(ente_client.backend.get_accounts())
 
     ente_client.download(path="Sony_HDR-HC3.jpg")
 
