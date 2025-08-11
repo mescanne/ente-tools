@@ -102,16 +102,13 @@ class SQLiteBackend(Backend):
                         sidecar_modified = True
                     elif old_sc and new_sc:
                         sidecar_modified = (
-                            old_sc.file.st_mtime_ns != new_sc.file.st_mtime_ns
-                            or old_sc.file.size != new_sc.file.size
+                            old_sc.file.st_mtime_ns != new_sc.file.st_mtime_ns or old_sc.file.size != new_sc.file.size
                         )
 
                     if media_modified or sidecar_modified:
                         # Modified
                         existing_media_db.media = media.model_dump()
-                        existing_media_db.xmp_sidecar = (
-                            media.xmp_sidecar.model_dump() if media.xmp_sidecar else None
-                        )
+                        existing_media_db.xmp_sidecar = media.xmp_sidecar.model_dump() if media.xmp_sidecar else None
                         session.add(existing_media_db)
                         processed_count += 1
 
@@ -125,7 +122,7 @@ class SQLiteBackend(Backend):
             deleted_paths = db_paths - all_disk_paths
             if deleted_paths:
                 log.info("Deleting %d files from DB", len(deleted_paths))
-                statement = delete(MediaDB).where(MediaDB.fullpath.in_(deleted_paths))
+                statement = delete(MediaDB).where(MediaDB.fullpath.in_(deleted_paths))  # type: ignore[attr-defined]
                 session.exec(statement)  # type: ignore[arg-type]
                 session.commit()
 
