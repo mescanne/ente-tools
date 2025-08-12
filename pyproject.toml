@@ -29,6 +29,7 @@ dependencies = [
     "pytest-emoji>=0.2.0",
     # Temporary to experiment with an alternative backend
     "sqlmodel>=0.0.24",
+    "python-dateutil>=2.9.0",
 ]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -46,6 +47,7 @@ Issues = "https://github.com/pypa/sampleproject/issues"
 
 [project.scripts]
 ente-tool = "ente_tools.cli:main"
+ente-sync = "ente_tools.sync_cli:app"
 
 [build-system]
 requires = ["hatchling"]
