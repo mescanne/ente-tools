@@ -14,21 +14,19 @@
 """DocString."""
 
 import getpass
-import logging
 from collections.abc import Generator
 
 import pytest
 
-from ente_tools.api.photo.sync import EnteClient
 from ente_tools.db.in_memory import InMemoryBackend
+from ente_tools.local_media_manager import LocalMediaManager
+from ente_tools.synchronizer import Synchronizer
 
 from .ente_test_server.ente_server import TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, EnteServer
 
-log = logging.getLogger(__name__)
-
 
 @pytest.fixture(scope="module")
-def ente_server_download() -> Generator[EnteServer]:
+def ente_server_with_some_files() -> Generator[EnteServer, None, None]:
     """DocString."""
     server = EnteServer(state="some_files")
     server.start()
@@ -36,30 +34,28 @@ def ente_server_download() -> Generator[EnteServer]:
     server.stop()
 
 
-@pytest.fixture
-def ente_client(monkeypatch: pytest.MonkeyPatch, ente_server_download: EnteServer) -> EnteClient:
+def test_download(
+    monkeypatch: pytest.MonkeyPatch,
+    ente_server_with_some_files: EnteServer,
+) -> None:
     """DocString."""
-    ente_client = ente_server_download.get_client(backend=InMemoryBackend())
+    backend = InMemoryBackend()
+    client = ente_server_with_some_files.get_client()
+    local_media_manager = LocalMediaManager(backend)
+    synchronizer = Synchronizer(client, local_media_manager, backend)
 
     # Get the OTP from the server logs
-    monkeypatch.setattr("builtins.input", lambda _: ente_server_download.get_otp())
+    monkeypatch.setattr("builtins.input", lambda _: ente_server_with_some_files.get_otp())
 
     # Requests for password are the admin password
     monkeypatch.setattr(getpass, "getpass", lambda: TEST_ADMIN_PASSWORD)
 
-    # If no exception is thrown, then this works
-    ente_client.link(email=TEST_ADMIN_EMAIL)
+    synchronizer.link(email=TEST_ADMIN_EMAIL)
 
-    return ente_client
+    synchronizer.remote_refresh()
 
+    assert len(backend.get_accounts()) == 1
 
-def test_download(ente_client: EnteClient) -> None:
-    """DocString."""
-    # refresh cache
-    ente_client.remote_refresh()
+    synchronizer.download(10000000)
 
-    log.info(ente_client.backend.get_accounts())
-
-    ente_client.download(path="Sony_HDR-HC3.jpg")
-
-    ente_client.info()
+    synchronizer.info()

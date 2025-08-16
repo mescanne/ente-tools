@@ -150,7 +150,7 @@ class TestSQLiteBackend(unittest.TestCase):
         original_sidecar_mtime = media[0].xmp_sidecar.file.st_mtime_ns
 
         # Modify only the sidecar
-        time.sleep(0.01)  # Ensure mtime is different
+        time.sleep(0.1)  # Ensure mtime is different
         xmp_path.touch()
 
         self.backend.local_refresh(sync_dir=self.tmpdir.name)

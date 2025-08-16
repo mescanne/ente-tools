@@ -20,6 +20,8 @@ from collections.abc import Generator
 import pytest
 
 from ente_tools.db.in_memory import InMemoryBackend
+from ente_tools.local_media_manager import LocalMediaManager
+from ente_tools.synchronizer import Synchronizer
 
 from .ente_test_server.ente_server import TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, EnteServer
 
@@ -37,7 +39,10 @@ def ente_server() -> Generator[EnteServer]:
 
 def test_login(monkeypatch: pytest.MonkeyPatch, ente_server: EnteServer) -> None:
     """DocString."""
-    ente_client = ente_server.get_client(backend=InMemoryBackend())
+    backend = InMemoryBackend()
+    client = ente_server.get_client()
+    local_media_manager = LocalMediaManager(backend)
+    synchronizer = Synchronizer(client, local_media_manager, backend)
 
     # Get the OTP from the server logs
     monkeypatch.setattr("builtins.input", lambda _: ente_server.get_otp())
@@ -46,4 +51,8 @@ def test_login(monkeypatch: pytest.MonkeyPatch, ente_server: EnteServer) -> None
     monkeypatch.setattr(getpass, "getpass", lambda: TEST_ADMIN_PASSWORD)
 
     # If no exception is thrown, then this works
-    ente_client.link(email=TEST_ADMIN_EMAIL)
+    synchronizer.link(email=TEST_ADMIN_EMAIL)
+
+    accounts = backend.get_accounts()
+    assert len(accounts) == 1
+    assert accounts[0].email == TEST_ADMIN_EMAIL

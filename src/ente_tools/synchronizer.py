@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Module for synchronizing local and remote photo files with the Ente API."""
+"""Orchestrates the synchronization between local and remote media."""
 
 import logging
 from collections import defaultdict
@@ -22,42 +22,29 @@ from typing import TYPE_CHECKING
 import humanize
 from jinja2 import Environment
 
-from ente_tools.api.core import EnteAPI
-from ente_tools.api.core.account import EnteAccount
 from ente_tools.api.core.api import EnteAPIError
-from ente_tools.api.photo.file_metadata import Media
-from ente_tools.api.photo.photo_file import RemotePhotoFile
-from ente_tools.db.base import Backend
+from ente_tools.api.local_media.photo_file import RemotePhotoFile
 
 if TYPE_CHECKING:
-    from ente_tools.api.core.types_crypt import EnteKeys
+    from ente_tools.api.core.account import EnteAccount
     from ente_tools.api.core.types_file import File
+    from ente_tools.api.local_media.file_metadata import Media
+    from ente_tools.api.local_media.sync import EnteClient
+    from ente_tools.db.base import Backend
+    from ente_tools.local_media_manager import LocalMediaManager
 
-log = logging.getLogger("sync")
+
+log = logging.getLogger(__name__)
 
 
-class EnteClient:
-    """Client for interacting with the Ente API and managing local and remote files."""
+class Synchronizer:
+    """Orchestrates the synchronization between local and remote media."""
 
-    EnteApiUrl = "https://api.ente.io"
-    EnteAccountUrl = "https://accounts.ente.io"
-    EnteDownloadUrl = "https://files.ente.io/?fileID="
-
-    def __init__(
-        self,
-        backend: Backend,
-        api_url: str = EnteApiUrl,
-        api_account_url: str = EnteAccountUrl,
-        api_download_url: str = EnteDownloadUrl,
-    ) -> None:
-        """Initialize the EnteClient with the given backend and API URLs."""
+    def __init__(self, client: "EnteClient", local_manager: "LocalMediaManager", backend: "Backend") -> None:
+        """Initialize the Synchronizer."""
+        self.client = client
+        self.local_manager = local_manager
         self.backend = backend
-        self.api = EnteAPI(
-            pkg="io.ente.photos",
-            api_url=api_url,
-            api_account_url=api_account_url,
-            api_download_url=api_download_url,
-        )
 
     def info(self) -> None:
         """Display information about the linked accounts and the status of local and remote files."""
@@ -65,12 +52,12 @@ class EnteClient:
         for acc in accounts:
             log.info("Account %s has collections %d, files %d", acc.email, len(acc.collections), len(acc.files))
 
-        def calc_files(desc: str, files: list[Media], t: Callable[[Media], bool]) -> str:
+        def calc_files(desc: str, files: list["Media"], t: Callable[["Media"], bool]) -> str:
             files = [f for f in files if t(f)]
             fsize = sum(f.media.file.size for f in files)
             return f"{desc} {len(files)} ({humanize.naturalsize(fsize)})"
 
-        def show_files(desc: str, files: list[Media]) -> None:
+        def show_files(desc: str, files: list["Media"]) -> None:
             s = ", ".join(
                 [
                     calc_files(
@@ -87,7 +74,7 @@ class EnteClient:
             )
             log.info("%s %s", desc, s)
 
-        local_media = self.backend.get_local_media()
+        local_media = self.local_manager.get_local_media()
         show_files("All", local_media)
 
         rfiles = {f.metadata.get("hash", ""): f for acc in accounts for c, files in acc.files.items() for f in files}
@@ -143,7 +130,7 @@ class EnteClient:
             if email in emails:
                 msg = f"Email {email} is already linked"
                 raise EnteAPIError(msg)
-            account = EnteAccount.authenticate(self.api, email)
+            account = self.client.authenticate(email)
             self.backend.add_account(account)
             self.remote_refresh(email=email)
 
@@ -152,49 +139,15 @@ class EnteClient:
         for acc in self.backend.get_accounts():
             if email and acc.email != email:
                 continue
-            log.info("Refreshing account %s", acc.email)
-            acc.refresh(self.api, force_refresh=force_refresh)
-            log.info(
-                "Refreshed account %s with %d collections and %d files.",
-                acc.email,
-                len(acc.collections),
-                len(acc.files),
-            )
+            self.client.refresh_account(acc, force_refresh=force_refresh)
             # After refreshing, we need to update the account in the backend
-            # This is tricky because we don't have a direct way to update an account.
-            # A simple way is to remove and re-add it.
             self.backend.remove_account(acc.email)
             self.backend.add_account(acc)
 
-    def local_export(self) -> None:
-        """Export the local files."""
-
-    def local_refresh(self, sync_dir: str, *, force_refresh: bool = False, workers: int | None = None) -> None:
-        """Refresh the local data by scanning the specified directory for media files."""
-        self.backend.local_refresh(sync_dir, force_refresh=force_refresh, workers=workers)
-
-    # TODO(scannell): Jinja template needs a way to deal with duplicates, e.g., making it unique
     def download_missing(self, jinja_template: str = "{{file.get_filename()}}") -> None:
-        """Download files present in the remote storage but not locally.
+        """Download files present in the remote storage but not locally."""
+        local_hashes = {f.media.hash for f in self.local_manager.get_local_media()}
 
-        This method identifies files that exist in the remote Ente storage but are not
-        present in the local sync directory. It uses a Jinja template to determine the
-        local filename for each file to be downloaded.
-
-        Args:
-            jinja_template: A Jinja template string used to generate the local filename
-                for each file to be downloaded. The template has access to a `file`
-                variable, which is an instance of `RemotePhotoFile`. Defaults to
-                "{{file.get_filename()}}".
-
-        """
-        # for those files, figure out using the template the target name
-        # download them in parallel by some configuration to the local filename
-
-        # Find local hashes
-        local_hashes = {f.media.hash for f in self.backend.get_local_media()}
-
-        # Find remote groups of files by hash that aren't already local
         file_groups: dict[str, list[File]] = defaultdict(list)
         for acc in self.backend.get_accounts():
             for files in acc.files.values():
@@ -207,57 +160,35 @@ class EnteClient:
 
         ftemplate = Environment(autoescape=True).from_string(jinja_template)
 
-        # Show what's to be downloaded
         log.info("To be downloaded:")
         for h, g in file_groups.items():
             log.info("Hash %s, files %s", h, ", ".join(x.metadata["title"] for x in g))
-            # Grab first and feed through template? Or just generate it as-is?
             fname = ftemplate.render(file=RemotePhotoFile(g[0]))
             log.info("Download file: %s", fname)
 
-    def download(self, path: str) -> None:  # noqa: C901
-        """Download a specific file from the remote storage to the local filesystem.
-
-        This method downloads a file from the remote Ente storage to the local
-        filesystem. The file is identified by its path (which corresponds to the
-        file's title in the remote storage).
-
-        Args:
-            path: The path (title) of the file to download.
-
-        Raises:
-            EnteAPIError: If the file is not found, or if multiple files match the given path.
-
-        """
-        found_files: list[File] = []
-        keys: EnteKeys | None = None
+    def download(self, file_id: int) -> None:
+        """Download a specific file from the remote storage to the local filesystem."""
+        found_file: "File" | None = None
+        account: EnteAccount | None = None
         for acc in self.backend.get_accounts():
             for files in acc.files.values():
                 for f in files:
-                    if not f.metadata:
-                        continue
-                    if "title" not in f.metadata:
-                        continue
-                    if f.metadata["title"] != path:
-                        continue
-                    keys = acc.keys()
-                    found_files.append(f)
+                    if f.id == file_id:
+                        found_file = f
+                        account = acc
+                        break
+                if found_file:
+                    break
+            if found_file:
+                break
 
-        for f in found_files:
-            log.info("Found file: %s", f.metadata["title"])
-
-        if len(found_files) > 1:
-            err = "Found multiple files"
+        if not found_file:
+            err = "File not found"
             raise EnteAPIError(err)
 
-        if len(found_files) == 0:
-            err = "Found no files"
+        if not account:
+            err = "Could not find account for file"
             raise EnteAPIError(err)
 
-        if keys is None:
-            err = "Found no keys"
-            raise EnteAPIError(err)
-
-        self.api.set_token(keys.token)
-
-        self.api.download_file(found_files[0], Path(found_files[0].metadata["title"]))
+        destination = Path(str(found_file.id))
+        self.client.download_file(account, found_file, destination)

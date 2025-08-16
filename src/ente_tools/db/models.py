@@ -13,6 +13,8 @@
 # limitations under the License.
 """SQLModel definitions for the database."""
 
+from enum import Enum
+
 from sqlalchemy import Column
 from sqlalchemy.types import JSON
 from sqlmodel import Field, SQLModel
@@ -34,10 +36,21 @@ class EnteAccountDB(SQLModel, table=True):
     files: dict[int, list[File]] = Field(sa_column=Column(JSON))
 
 
+class MediaStatus(str, Enum):
+    """Represents the processing status of a media file."""
+
+    NEW = "new"
+    PROCESSED = "processed"
+    ERROR = "error"
+
+
 class MediaDB(SQLModel, table=True):
     """Represents a media file in the database."""
 
     id: int | None = Field(default=None, primary_key=True)
-    media: dict = Field(sa_column=Column(JSON))
+    media: dict | None = Field(default=None, sa_column=Column(JSON))
     xmp_sidecar: dict | None = Field(default=None, sa_column=Column(JSON))
     fullpath: str = Field(unique=True)
+    sidecar_path: str | None = Field(default=None)
+    status: MediaStatus = Field(default=MediaStatus.NEW)
+    last_error: str | None = Field(default=None)

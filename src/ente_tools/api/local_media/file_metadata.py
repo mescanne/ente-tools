@@ -15,14 +15,12 @@
 
 import logging
 from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor
 from mimetypes import guess_type
 from pathlib import Path
 
 from pydantic import BaseModel, Field
-from rich.progress import track
 
-from ente_tools.api.photo.loader import MediaTypes, NewLocalDiskFile, NewXMPDiskFile, identify_media_type
+from ente_tools.api.local_media.loader import MediaTypes, NewLocalDiskFile, NewXMPDiskFile, identify_media_type
 
 log = logging.getLogger(__name__)
 
@@ -49,28 +47,18 @@ class Media(BaseModel):
         self.xmp_sidecar = NewXMPDiskFile.from_file(sidecar)
 
 
-def scan_media(sync_dir: str, workers: int | None = None) -> Iterator[Media]:  # noqa: C901
-    """DocString."""
-    scan_files: dict[type[MediaTypes], list[tuple[NewLocalDiskFile, NewLocalDiskFile | None]]] = {}
-
-    log.info("Scanning files %s", sync_dir)
+def scan_disk(sync_dir: str) -> Iterator[tuple[NewLocalDiskFile, NewLocalDiskFile | None]]:
+    """Scan a directory for media files and their corresponding XMP sidecars."""
+    log.info("Scanning files in %s", sync_dir)
     for root, _, files in Path(sync_dir).walk():
-        # set of files
         files_set = set(files)
-
         for file in files:
-            # Skip non-media files
             mime_type = guess_type(file, strict=False)[0]
-            if not mime_type:
-                continue
-            media_type = identify_media_type(mime_type)
-            if not media_type:
+            if not mime_type or not identify_media_type(mime_type):
                 continue
 
-            # Capture stats and basic information
             media_file = NewLocalDiskFile.from_path(path=root / file, mime_type=mime_type)
 
-            # Identify the XMP sidecars
             xmp_sidecars = [
                 NewLocalDiskFile.from_path(path=Path(root / f))
                 for f in [
@@ -84,44 +72,11 @@ def scan_media(sync_dir: str, workers: int | None = None) -> Iterator[Media]:  #
 
             if len(xmp_sidecars) > 1:
                 log.warning(
-                    "WARNING: %s has multiple XMP sidecars: %s",
+                    "Found multiple XMP sidecars for %s: %s",
                     media_file.fullpath,
                     ", ".join(s.fullpath for s in xmp_sidecars),
                 )
 
             xmp_sidecars.sort(key=lambda f: f.st_mtime_ns)
-            xmp_sidecar = xmp_sidecars[-1] if len(xmp_sidecars) > 0 else None
-
-            # Mark file as needed to re-scan image or video
-            if media_type not in scan_files:
-                scan_files[media_type] = []
-
-            scan_files[media_type].append((media_file, xmp_sidecar))
-
-    for subtype, tasks in scan_files.items():
-        log.info("Found new %d %s files", len(tasks), subtype.__name__)
-
-    # Process each type
-    for subtype, tasks in scan_files.items():
-        log.info("Found new %d %s files", len(tasks), subtype.__name__)
-
-        def run_task(task: tuple[NewLocalDiskFile, NewLocalDiskFile | None]) -> Media | None:
-            media = subtype.from_file(task[0])  # noqa: B023
-            if not media:
-                log.warning("failed processing %s", task[0].fullpath)
-                return None
-            return Media(
-                media=media,
-                xmp_sidecar=NewXMPDiskFile.from_file(task[1]) if task[1] else None,
-            )
-
-        with ThreadPoolExecutor(max_workers=workers) as e:
-            yield from (
-                r
-                for r in track(
-                    e.map(run_task, tasks),
-                    description="Processing",
-                    total=len(tasks),
-                )
-                if r
-            )
+            xmp_sidecar = xmp_sidecars[-1] if xmp_sidecars else None
+            yield media_file, xmp_sidecar

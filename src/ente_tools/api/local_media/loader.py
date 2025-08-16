@@ -26,7 +26,7 @@ import av
 from PIL import ExifTags, Image
 from pillow_heif import register_heif_opener
 
-from ente_tools.api.photo.local_file import MetadataModel, NewLocalDiskFile
+from ente_tools.api.local_media.local_file import MetadataModel, NewLocalDiskFile
 
 log = logging.getLogger(__name__)
 

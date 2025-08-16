@@ -24,9 +24,11 @@ from rich.logging import RichHandler
 from typer_config.callbacks import toml_conf_callback
 
 from ente_tools.api.core.api import EnteAPIError
-from ente_tools.api.photo.sync import EnteClient
+from ente_tools.api.local_media.sync import EnteClient
 from ente_tools.db.in_memory import InMemoryBackend
 from ente_tools.db.sqlite import SQLiteBackend
+from ente_tools.local_media_manager import LocalMediaManager
+from ente_tools.synchronizer import Synchronizer
 
 if TYPE_CHECKING:
     from ente_tools.db.base import Backend
@@ -79,14 +81,14 @@ def load_toml_config(ctxt: typer.Context, param: typer.CallbackParam, config: st
     return toml_conf_callback(ctxt, param, config)
 
 
-def get_client(ctxt: typer.Context) -> EnteClient:
-    """Create EnteClient using the command line arguments."""
-    return EnteClient(
-        ctxt.obj["backend"],
-        api_url=ctxt.obj["api_url"],
-        api_account_url=ctxt.obj["api_account_url"],
-        api_download_url=ctxt.obj["api_download_url"],
-    )
+def get_local_media_manager(ctxt: typer.Context) -> LocalMediaManager:
+    """Create LocalMediaManager using the command line arguments."""
+    return ctxt.obj["local_media_manager"]
+
+
+def get_synchronizer(ctxt: typer.Context) -> Synchronizer:
+    """Create Synchronizer using the command line arguments."""
+    return ctxt.obj["synchronizer"]
 
 
 @app.command()
@@ -96,15 +98,15 @@ def link(
     unlink: Annotated[bool, typer.Option()] = False,  # noqa: FBT002
 ) -> None:
     """Link or unlink email with local database."""
-    client = get_client(ctxt)
-    client.link(email, unlink=unlink)
+    synchronizer = get_synchronizer(ctxt)
+    synchronizer.link(email, unlink=unlink)
 
 
 @app.command()
 def info(ctxt: typer.Context) -> None:
     """Fetch general information about the database."""
-    client = get_client(ctxt)
-    client.info()
+    synchronizer = get_synchronizer(ctxt)
+    synchronizer.info()
 
 
 @app.command()
@@ -112,24 +114,19 @@ def refresh(
     ctxt: typer.Context,
     force_refresh: Annotated[bool, typer.Option()] = False,  # noqa: FBT002
     email: Annotated[str | None, typer.Option()] = None,
-    workers: Annotated[int | None, typer.Option()] = None,
 ) -> None:
     """Refresh both remote and local data."""
-    client = get_client(ctxt)
-    client.remote_refresh(email=email, force_refresh=force_refresh)
-    client.local_refresh(ctxt.obj["sync_dir"], force_refresh=force_refresh, workers=workers)
+    synchronizer = get_synchronizer(ctxt)
+    local_media_manager = get_local_media_manager(ctxt)
+    synchronizer.remote_refresh(email=email, force_refresh=force_refresh)
+    local_media_manager.local_refresh(ctxt.obj["sync_dir"], force_refresh=force_refresh)
 
 
 @app.command()
 def export(ctxt: typer.Context) -> None:
     """Export local data."""
-    client = get_client(ctxt)
-    log.info("Exporting")
-    for m in client.backend.get_local_media():
-        log.info(m.media.file.fullpath)
-        log.info(m.media.hash)
-        log.info(m.media.data_hash)
-        log.info(m.media.media_type)
+    local_media_manager = get_local_media_manager(ctxt)
+    local_media_manager.local_export()
 
 
 @app.command()
@@ -142,15 +139,15 @@ def upload(ctxt: typer.Context, file: str) -> None:
 @app.command()
 def download_missing(ctxt: typer.Context) -> None:
     """Download any files that are not local."""
-    client = get_client(ctxt)
-    client.download_missing()
+    synchronizer = get_synchronizer(ctxt)
+    synchronizer.download_missing()
 
 
 @app.command()
-def download(ctxt: typer.Context, file: str) -> None:
+def download(ctxt: typer.Context, file_id: int) -> None:
     """Download a remote file."""
-    client = get_client(ctxt)
-    client.download(file)
+    synchronizer = get_synchronizer(ctxt)
+    synchronizer.download(file_id)
 
 
 @app.callback()
@@ -187,13 +184,20 @@ def app_main(  # noqa: PLR0913
         SQLiteBackend(db_path=str(database)) if backend == BackendChoice.SQLITE else InMemoryBackend()
     )
 
+    client = EnteClient(
+        api_url=api_url,
+        api_account_url=api_account_url,
+        api_download_url=api_download_url,
+    )
+    local_media_manager = LocalMediaManager(backend=backend_instance)
+    synchronizer = Synchronizer(client=client, local_manager=local_media_manager, backend=backend_instance)
+
     ctxt.obj["backend"] = backend_instance
+    ctxt.obj["local_media_manager"] = local_media_manager
+    ctxt.obj["synchronizer"] = synchronizer
     ctxt.obj["max_vers"] = max_vers
     ctxt.obj["sync_dir"] = sync_dir
     ctxt.obj["database"] = database
-    ctxt.obj["api_url"] = api_url
-    ctxt.obj["api_account_url"] = api_account_url
-    ctxt.obj["api_download_url"] = api_download_url
 
 
 def main() -> None:

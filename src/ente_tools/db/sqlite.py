@@ -14,13 +14,16 @@
 """SQLite backend for the database."""
 
 import logging
+from mimetypes import guess_type
+from pathlib import Path
 
 from sqlmodel import Session, SQLModel, create_engine, delete, select
 
 from ente_tools.api.core.account import EnteAccount
-from ente_tools.api.photo.file_metadata import Media, scan_media
+from ente_tools.api.local_media.file_metadata import Media, scan_disk
+from ente_tools.api.local_media.loader import NewLocalDiskFile, NewXMPDiskFile, identify_media_type
 from ente_tools.db.base import Backend
-from ente_tools.db.models import EnteAccountDB, MediaDB
+from ente_tools.db.models import EnteAccountDB, MediaDB, MediaStatus
 
 log = logging.getLogger(__name__)
 
@@ -59,74 +62,115 @@ class SQLiteBackend(Backend):
     def get_local_media(self) -> list[Media]:
         """Get all local media from the backend."""
         with Session(self.engine) as session:
-            # The `media` field in MediaDB is a dict representation of a Media object.
-            return [Media(**db_media.media) for db_media in session.exec(select(MediaDB)).all()]
+            return [
+                Media(**db_media.media)
+                for db_media in session.exec(select(MediaDB).where(MediaDB.status == MediaStatus.PROCESSED)).all()
+                if db_media.media is not None
+            ]
 
-    def local_refresh(self, sync_dir: str, *, force_refresh: bool = False, workers: int | None = None) -> None:
+    def local_refresh(self, sync_dir: str, *, force_refresh: bool = False) -> None:
         """Refresh the local data by scanning the specified directory for media files."""
         if force_refresh:
             self._clear_local_media()
 
         with Session(self.engine) as session:
-            all_disk_paths = set()
-            processed_count = 0
+            self._scan_and_update_db(session, sync_dir)
+            self._process_new_files(session)
+            self._handle_deletions(session, sync_dir)
 
-            db_media_dict = {media.fullpath: media for media in session.exec(select(MediaDB)).all()}
-
-            for media in scan_media(sync_dir, workers=workers):
-                all_disk_paths.add(media.media.file.fullpath)
-
-                existing_media_db = db_media_dict.get(media.media.file.fullpath)
-
-                if existing_media_db is None:
-                    # New file
-                    db_media = MediaDB(
-                        media=media.model_dump(),
-                        xmp_sidecar=media.xmp_sidecar.model_dump() if media.xmp_sidecar else None,
-                        fullpath=media.media.file.fullpath,
-                    )
-                    session.add(db_media)
-                    processed_count += 1
-                else:
-                    existing_media_obj = Media(**existing_media_db.media)
-
+    def _scan_and_update_db(self, session: Session, sync_dir: str) -> None:
+        db_media_dict = {media.fullpath: media for media in session.exec(select(MediaDB)).all()}
+        for media_file, xmp_sidecar in scan_disk(sync_dir):
+            existing_media_db = db_media_dict.get(media_file.fullpath)
+            sidecar_path = xmp_sidecar.fullpath if xmp_sidecar else None
+            if existing_media_db is None:
+                db_media = MediaDB(
+                    fullpath=media_file.fullpath,
+                    sidecar_path=sidecar_path,
+                    status=MediaStatus.NEW,
+                )
+                session.add(db_media)
+            else:
+                # Check for modification of media file or sidecar
+                media_modified = False
+                if existing_media_db.media:
                     media_modified = (
-                        existing_media_obj.media.file.st_mtime_ns != media.media.file.st_mtime_ns
-                        or existing_media_obj.media.file.size != media.media.file.size
+                        existing_media_db.media["media"]["file"]["st_mtime_ns"] != media_file.st_mtime_ns
+                        or existing_media_db.media["media"]["file"]["size"] != media_file.size
                     )
 
-                    sidecar_modified = False
-                    old_sc = existing_media_obj.xmp_sidecar
-                    new_sc = media.xmp_sidecar
-                    if (old_sc is None) != (new_sc is None):
-                        sidecar_modified = True
-                    elif old_sc and new_sc:
-                        sidecar_modified = (
-                            old_sc.file.st_mtime_ns != new_sc.file.st_mtime_ns or old_sc.file.size != new_sc.file.size
-                        )
+                sidecar_modified = existing_media_db.sidecar_path != sidecar_path
+                if xmp_sidecar and existing_media_db.xmp_sidecar:
+                    sidecar_modified = (
+                        existing_media_db.xmp_sidecar["file"]["st_mtime_ns"] != xmp_sidecar.st_mtime_ns
+                        or existing_media_db.xmp_sidecar["file"]["size"] != xmp_sidecar.size
+                    )
 
-                    if media_modified or sidecar_modified:
-                        # Modified
-                        existing_media_db.media = media.model_dump()
-                        existing_media_db.xmp_sidecar = media.xmp_sidecar.model_dump() if media.xmp_sidecar else None
-                        session.add(existing_media_db)
-                        processed_count += 1
+                if media_modified or sidecar_modified:
+                    existing_media_db.status = MediaStatus.NEW
+                    existing_media_db.sidecar_path = sidecar_path
+                    session.add(existing_media_db)
+        session.commit()
 
-                if processed_count > 0 and processed_count % 100 == 0:
-                    session.commit()
+    def _process_new_files(self, session: Session) -> None:
+        while True:
+            new_files = session.exec(select(MediaDB).where(MediaDB.status == MediaStatus.NEW).limit(100)).all()
+            if not new_files:
+                break
+            for db_media in new_files:
+                self._process_single_file(db_media)
+                session.add(db_media)
+            session.commit()
 
-            session.commit()  # commit any remaining changes
+    def _process_single_file(self, db_media: MediaDB) -> None:
+        try:
+            mime_type, _ = guess_type(db_media.fullpath, strict=False)
+            if not mime_type:
+                db_media.status = MediaStatus.ERROR
+                db_media.last_error = "Could not identify media type"
+                return
+            media_type_class = identify_media_type(mime_type)
+            if not media_type_class:
+                db_media.status = MediaStatus.ERROR
+                db_media.last_error = "Could not identify media type"
+                return
 
-            # Handle deletions
-            db_paths = set(db_media_dict.keys())
-            deleted_paths = db_paths - all_disk_paths
-            if deleted_paths:
-                log.info("Deleting %d files from DB", len(deleted_paths))
-                statement = delete(MediaDB).where(MediaDB.fullpath.in_(deleted_paths))  # type: ignore[attr-defined]
-                session.exec(statement)  # type: ignore[arg-type]
-                session.commit()
+            media_file = NewLocalDiskFile.from_path(path=Path(db_media.fullpath))
+            media = media_type_class.from_file(media_file)
+            if not media:
+                db_media.status = MediaStatus.ERROR
+                db_media.last_error = "Failed to process media file"
+                return
+
+            xmp_sidecar = None
+            if db_media.sidecar_path:
+                xmp_sidecar = NewXMPDiskFile.from_file(
+                    NewLocalDiskFile.from_path(path=Path(db_media.sidecar_path)),
+                )
+
+            media_obj = Media(media=media, xmp_sidecar=xmp_sidecar)
+
+            db_media.media = media_obj.model_dump()
+            db_media.xmp_sidecar = xmp_sidecar.model_dump() if xmp_sidecar else None
+            db_media.status = MediaStatus.PROCESSED
+        except Exception as e:
+            log.exception("Error processing %s", db_media.fullpath)
+            db_media.status = MediaStatus.ERROR
+            db_media.last_error = str(e)
+
+    def _handle_deletions(self, session: Session, sync_dir: str) -> None:
+        all_disk_paths = {mf.fullpath for mf, _ in scan_disk(sync_dir)}
+        db_paths = {p.fullpath for p in session.exec(select(MediaDB)).all()}
+        deleted_paths = db_paths - all_disk_paths
+        if deleted_paths:
+            log.info("Deleting %d files from DB", len(deleted_paths))
+            statement = select(MediaDB).where(MediaDB.fullpath.in_(deleted_paths))
+            results = session.exec(statement)
+            for media_db in results:
+                session.delete(media_db)
+            session.commit()
 
     def _clear_local_media(self) -> None:
         with Session(self.engine) as session:
-            session.exec(delete(MediaDB))  # type: ignore[arg-type]
+            session.exec(delete(MediaDB))
             session.commit()

@@ -16,7 +16,7 @@
 from abc import ABC, abstractmethod
 
 from ente_tools.api.core.account import EnteAccount
-from ente_tools.api.photo.file_metadata import Media
+from ente_tools.api.local_media.file_metadata import Media
 
 
 class Backend(ABC):
@@ -43,6 +43,6 @@ class Backend(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def local_refresh(self, sync_dir: str, *, force_refresh: bool = False, workers: int | None = None) -> None:
+    def local_refresh(self, sync_dir: str, *, force_refresh: bool = False) -> None:
         """Refresh the local data by scanning the specified directory for media files."""
         raise NotImplementedError
